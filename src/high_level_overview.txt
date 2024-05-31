@@ -1,0 +1,16 @@
+what do I need to implement
+
+
+1. CPU
+2. RAM
+
+3. Video Ram 
+4. Objects
+5. Palletes
+6. Screen
+
+7. Sound 
+
+8. Joypad input 
+
+9. Cartridge
