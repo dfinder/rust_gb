@@ -11,7 +11,7 @@ pub mod screen {
     }
     implement_vertex!(Vertex, position);
     
-    pub fn display_screen<T glium::glutin::Surface::ResizableSurface>(display: &Display<T>, frame: &Frame){
+    pub fn display_screen<T glium::glutin::Surface::ResizableSurface>(display: &Display, frame: &Frame){
 
 
         let vertex1 = Vertex { position: [-0.5, -0.5] };
