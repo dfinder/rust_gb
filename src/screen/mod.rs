@@ -4,21 +4,27 @@
 pub mod screen {
     use glium::*;
     use glium::Surface; 
-    use glium::Facade;
+    use glium::backend::Facade;
+    use crate::glutin::surface::ResizeableSurface;
+    use crate::glutin::surface::SurfaceTypeTrait;
+    use crate::glutin::surface::*;
+    
+    use winit::window::Window;
     #[derive(Copy, Clone)]
     struct Vertex {
         position: [f32; 2],
     }
     implement_vertex!(Vertex, position);
+    //use crate::glutin::surface::SurfaceTypeTrait;
     
-    pub fn display_screen<T glium::glutin::Surface::ResizableSurface>(display: &Display, frame: &Frame){
+    pub fn display_screen(display: &Display<WindowSurface>, frame: &Frame){
 
 
         let vertex1 = Vertex { position: [-0.5, -0.5] };
         let vertex2 = Vertex { position: [ 0.0,  0.5] };
         let vertex3 = Vertex { position: [ 0.5, -0.25] };
         let shape = vec![vertex1, vertex2, vertex3];
-        let vertex_buffer = glium::VertexBuffer::new(&display, &shape).unwrap();
+        let vertex_buffer = glium::VertexBuffer::new(display, &shape).unwrap();
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
         let vertex_shader_src = r#"
 
@@ -37,7 +43,7 @@ pub mod screen {
             color = vec4(1.0, 0.0, 0.0, 1.0);
         }
         "#;
-        let program = glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None).unwrap();
+        let program = glium::Program::from_source(display, vertex_shader_src, fragment_shader_src, None).unwrap();
         
     }
 }

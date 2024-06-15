@@ -1,8 +1,7 @@
 pub mod screen;
 use winit::*;
 use glium::*;
-
-use glium::Surface;
+use crate::screen::screen::display_screen;
 #[macro_use]
 extern crate glium;
 fn main() {
@@ -10,7 +9,7 @@ fn main() {
     let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
     let mut frame = display.draw();
     frame.clear_color(0.0, 0.0, 1.0, 1.0);
-    screen::display_screen(&display, &frame);
+    display_screen(&display, &frame);
     frame.finish().unwrap();
     let _ = event_loop.run(move |event, window_target| {
         match event {
