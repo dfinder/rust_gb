@@ -5,7 +5,21 @@ use crate::screen::screen::display_screen;
 #[macro_use]
 extern crate glium;
 fn main() {
+    
 
+    // Set up window/connectivity with OS
+    // Read startup data
+    // Read Cartridge into memory
+    // Start program counter
+    // loop
+        //Read buttons
+        //Increment program counter
+        //Execute command at program counter
+        //Draw Screen
+        //Doot
+        //Timers
+
+    
 
     //let event_loop = winit::event_loop::EventLoopBuilder::new().build().expect("event loop building");
     //let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
