@@ -11,12 +11,14 @@ mod cpu {
             memory_reference:memory;
             function_lookup:[fun_find;64];
             cblock_lookup:[fun_find;11];
+            current_command:u8;
         }
 
         public struct function_find
         fn instantiate_cpu() -> Self{
             registers=registers::build_registers()
             memory= memory::build_memory()
+            current_command = 0x00; //initalize to a noop
             function_lookup = [
                 //Block 1,
                 fun_find{0xff,0x00,self.nop},
@@ -106,7 +108,7 @@ mod cpu {
         }
         fn interpret_command(&mut self){
             //my_pc = self.register_set.PC;
-            let current_command:u8 = self.memory.grab_memory_8(self.register_set.PC);
+            let current_command:u8 = self.memory.grab_memory_8(self.register_set.increment_pc());
             //let first_two:u8 = current_command >> 6
             //static masks:[u8]=[0xFF,0xCF,0xE7,0xC0,0xFC, 0xC7,0xF8]
             let taken:bool = false;
@@ -147,13 +149,14 @@ mod cpu {
         }
         fn rrca(&mut self){
             self.registers.set_carry((self.registers.A<<7)>0)); 
-            self.registers.set_single_register(Registers:SingleRegister::A, )= self.registers.A.rotate_right(1);
+            let acc:u8 = self.registers.A.rotate_right(1);
+            self.registers.set_single_register(Registers:SingleRegister::A, acc);
             self.wait(1);
         }
         fn stop(&mut self){
             panic!("crash and burn");
         }
-        fn rra(&mut self){
+        fn rra(&mut self){ //Need to rewrite.
              //Rotate register a to the right _through_ the carry bti .
                 let carry:bool = self.registers.get_carry();
                 let bottom:bool = (self.registers.A & 0x01) == 0x01 //Get bit number 8W
@@ -162,7 +165,7 @@ mod cpu {
                 self.wait(1) 
         }
         fn jr(&mut self){
-            let next_value: 18 = (self.memory.grab_memory_8(self.registers.PC+1) as i8);
+            let next_value: 18 = (self.memory.grab_memory_8(self.registers.increment_pc()) as i8);
             if (next_value>0){
                 self.registers.PC += next_value as u8 
                    //but wait, this is signed
@@ -171,6 +174,40 @@ mod cpu {
                 self.registers.PC -= (!(next_value) + 1) as u8 
             }
             self.wait(3)
+        }
+        fn str_r16_imm(&mut self){ //Properly LD r16 imm16
+            let reg_pair:DoubleReg = match self.current_command{
+                0x01 => Registers.BC,
+                0x11 => Registers.DE,
+                0x21 => Registers.HL,
+                0x31 => Registers.SP,
+            }
+            self.registers.set_double_register(reg_pair,self.memory.grab_memory_16()) 
+            //This may actually also be like... just run str r8 imm twice.
+            self.wait(11)
+        }
+        fn str_addr_acc(&mut self){
+            let reg_pair:DoubleReg = match self.current_command{
+                0x02 => Registers.BC,
+                0x12 => Registers.DE,
+                0x22 => Registers.HLP,
+                0x32 => Registers.HLM,
+                _ => panic("oof")
+            }
+            self.memory.set_memory_8(self.registers.get_double_register(reg_pair),self.registers.get_acc())
+            self.wait(8)
+        }
+        fn inc_r16(&mut self){
+            let reg_pair:DoubleReg = match self.current_command{
+                0x03 => Registers.BC,
+                0x13 => Registers.DE,
+                0x23 => Registers.HL,
+                0x33 => Registers.SP
+                _ => panic("oof")
+            }
+            value:u16=self.registers.get_double_register(reg_pair) 
+
+            self.wait(8)
         }
         fn cd_block(&mut self){
             self.registers.increment_pc();

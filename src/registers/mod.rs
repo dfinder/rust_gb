@@ -24,6 +24,8 @@ mod registers {
         BC,
         DE,
         HL,
+        HLP,
+        HLM,
         SP,
         PC 
     }
@@ -54,62 +56,72 @@ mod registers {
         }
         fn get_single_register(&mut self, SingleReg reg)  -> u8{
             match reg{ 
-                SingleReg::A => self.A 
-                SingleReg::B => self.B 
-                SingleReg::C => self.C
-                SingleReg::D => self.D
-                SingleReg::E => self.E
-                SingleReg::F => self.F
-                SingleReg::H => self.H
-                SingleReg::L => self.L
+                SingleReg::A => self.A,
+                SingleReg::B => self.B ,
+                SingleReg::C => self.C,
+                SingleReg::D => self.D,
+                SingleReg::E => self.E,
+                SingleReg::F => self.F,
+                SingleReg::H => self.H,
+                SingleReg::L => self.L,
             }
         }
         fn get_double_register(&mut self, DoubleReg reg) -> u16{
             match reg{ 
-                DoubleReg::AF =>  (self.A as u16 ) * 0x80 + self.F
-                DoubleReg::BC =>  (self.B as u16 ) * 0x80 + self.C
-                DoubleReg::DE =>  (self.D as u16 ) * 0x80 + self.E;
-                DoubleReg::HL =>  (self.H as u16 ) * 0x80 + self.L;
+                DoubleReg::AF =>  (self.A as u16 ) * 0x80 + self.F,
+                DoubleReg::BC =>  (self.B as u16 ) * 0x80 + self.C,
+                DoubleReg::DE =>  (self.D as u16 ) * 0x80 + self.E,
+                DoubleReg::HL =>  (self.H as u16 ) * 0x80 + self.L,
+                DoubleReg::HLP => {
+                    self.increment_hl();
+                    (self.H as u16 ) * 0x80 + self.L + 1;
+                
+                }
+
+                DoubleReg::HLM => {
+                    (self.H as u16 ) * 0x80 + self.L - 1
+                    self.decrement_hl();
+                }
             }
         }
         fn get_flag(&mut self, Flag flag) -> bool {
             match flag{
-                Flag::Zero => ((self.F & 0x80) == 1)
-                Flag::Subtraction => ((self.F & 0x40) == 2)
-                Flag::HalfCarry => ((self.F & 0x20) == 4)
-                Flag::Carry => ((self.F & 0x10) == 8)
+                Flag::Zero => ((self.F & 0x80) == 1),
+                Flag::Subtraction => ((self.F & 0x40) == 2),
+                Flag::HalfCarry => ((self.F & 0x20) == 4),
+                Flag::Carry => ((self.F & 0x10) == 8),
             }
         }
         fn set_single_register(&mut self, SingleReg reg, u8 val){
             match reg{ 
-                SingleReg::A => self.A = set 
-                SingleReg::B => self.B = set 
-                SingleReg::C => self.C = set 
-                SingleReg::D => self.D = set 
-                SingleReg::E => self.E = set 
-                SingleReg::F => panic!("oopsie, we tried to set F");
-                SingleReg::H => self.H = set 
-                SingleReg::L => self.L = set
+                SingleReg::A => self.A = set ,
+                SingleReg::B => self.B = set ,
+                SingleReg::C => self.C = set ,
+                SingleReg::D => self.D = set ,
+                SingleReg::E => self.E = set ,
+                SingleReg::F => panic!("oopsie, we tried to set F"),
+                SingleReg::H => self.H = set ,
+                SingleReg::L => self.L = set,
             }
         }
         fn set_double_register(&mut self, DoubleReg reg, u16 val) -> u16{
             match reg{ 
-                DoubleReg::AF => panic!("We can't set F from Double Set")
+                DoubleReg::AF => panic!("We can't set F from Double Set"),
                 DoubleReg::BC => {
-                    self.B = (val >> 8) as u8
-                    self.C = val as u8
-                }
+                    self.B = (val >> 8) as u8;
+                    self.C = val as u8;
+                },
                 DoubleReg::DE => {
-                    self.D = (val >> 8) as u8
-                    self.E = val as u8
-                }
+                    self.D = (val >> 8) as u8;
+                    self.E = val as u8;
+                },
                 DoubleReg::HL => {
                 {
-                    self.H = (val >> 8) as u8
-                    self.L = val as u8
-                }
-                DoubleReg::SP => self.SP=val 
-                DoubleReg::PC => self.PC=val 
+                    self.H = (val >> 8) as u8;
+                    self.L = val as u8;
+                },
+                DoubleReg::SP => self.SP=val ,
+                DoubleReg::PC => self.PC=val ,
             }
         }
         fn set_flag(&mut self, Flag flag) -> bool {
@@ -130,6 +142,9 @@ mod registers {
         }
         fn increment_pc(&mut self,u8 amount) -> u16{
             self.PC += amount
+        }
+        fn set_pc(&mut self,u16 amount) -> u16{
+            self.PC = amount;
         }
         fn increment_pc(&mut self) -> u16{
             self.PC += 1
