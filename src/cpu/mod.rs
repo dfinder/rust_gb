@@ -143,14 +143,14 @@ mod cpu {
             self.wait(1) 
         }
         fn load_sp(&mut self){
-            self.registers.SP = self.memory.grab_memory_16(self.registers.PC+1);
-            self.registers.increment_pc(2);
+            self.registers.set_double_register(Registers::DoubleReg::SP,self.memory.grab_memory_16(self.registers.increment_pc()));
+            self.registers.increment_pc(1);
             self.wait(3);
         }
         fn rrca(&mut self){
-            self.registers.set_carry((self.registers.A<<7)>0)); 
-            let acc:u8 = self.registers.A.rotate_right(1);
-            self.registers.set_single_register(Registers:SingleRegister::A, acc);
+            self.registers.set_carry((self.registers.get_acc()<<7)>0)); 
+            let acc:u8 = self.registers.get_acc().rotate_right(1);
+            self.registers.set_single_register(Registers::SingleRegister::A, acc);
             self.wait(1);
         }
         fn stop(&mut self){
@@ -159,7 +159,7 @@ mod cpu {
         fn rra(&mut self){ //Need to rewrite.
              //Rotate register a to the right _through_ the carry bti .
                 let carry:bool = self.registers.get_carry();
-                let bottom:bool = (self.registers.A & 0x01) == 0x01 //Get bit number 8W
+                let bottom:bool = (self.registers.get_acc() & 0x01) == 0x01 //Get bit number 8W
                 self.registers.set_carry(bottom)
                 self.registers.A = self.registers.A > 1 + carry << 8
                 self.wait(1) 
@@ -177,10 +177,11 @@ mod cpu {
         }
         fn str_r16_imm(&mut self){ //Properly LD r16 imm16
             let reg_pair:DoubleReg = match self.current_command{
-                0x01 => Registers.BC,
-                0x11 => Registers.DE,
-                0x21 => Registers.HL,
-                0x31 => Registers.SP,
+                0x01 => Registers::BC,
+                0x11 => Registers::DE,
+                0x21 => Registers::HL,
+                0x31 => Registers::SP,
+                _ => panic("Failure at mapping for str_r16_imm on line 179")
             }
             self.registers.set_double_register(reg_pair,self.memory.grab_memory_16()) 
             //This may actually also be like... just run str r8 imm twice.
@@ -188,27 +189,47 @@ mod cpu {
         }
         fn str_addr_acc(&mut self){
             let reg_pair:DoubleReg = match self.current_command{
-                0x02 => Registers.BC,
-                0x12 => Registers.DE,
-                0x22 => Registers.HLP,
-                0x32 => Registers.HLM,
+                0x02 => Registers::DoubleReg::BC,
+                0x12 => Registers::DoubleReg::DE,
+                0x22 => Registers::DoubleReg::HLP,
+                0x32 => Registers::DoubleReg::HLM,
                 _ => panic("oof")
             }
             self.memory.set_memory_8(self.registers.get_double_register(reg_pair),self.registers.get_acc())
             self.wait(8)
         }
+        fn inc_r8(&mut self){
+            let reg_pair:SingleReg = match self.current_command{
+                0x04=>Registers::SingleReg::B
+                0
+            }
+            self.wait(4)
+        }
         fn inc_r16(&mut self){
             let reg_pair:DoubleReg = match self.current_command{
-                0x03 => Registers.BC,
+                0x03 => Registers::DoubleReg::BC,
                 0x13 => Registers.DE,
                 0x23 => Registers.HL,
                 0x33 => Registers.SP
                 _ => panic("oof")
-            }
-            value:u16=self.registers.get_double_register(reg_pair) 
-
+            };
+            value:u16=self.registers.get_double_register(reg_pair);
+            self.registers.set_double_register(reg_pair,value+1);
             self.wait(8)
         }
+        fn dec_r16(&mut self){
+            let reg_pair:DoubleReg = match self.current_command{
+                0x0b => Registers.BC,
+                0x1b => Registers.DE,
+                0x2b => Registers.HL,
+                0x3b => Registers.SP
+                _ => panic("oof")
+            };
+            value:u16=self.registers.get_double_register(reg_pair);
+            self.registers.set_double_register(reg_pair,value-1);
+            self.wait(8)
+
+        };
         fn cd_block(&mut self){
             self.registers.increment_pc();
             let current_command:u8 = self.memory.grab_memory_8(self.register_set.PC)
