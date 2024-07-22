@@ -167,7 +167,7 @@ mod cpu {
         fn jr(&mut self){
             let next_value: 18 = (self.memory.grab_memory_8(self.registers.increment_pc()) as i8);
             if (next_value>0){
-                self.registers.PC += next_value as u8 
+                self.registers. += next_value as u8 
                    //but wait, this is signed
             }
             else{
@@ -177,11 +177,11 @@ mod cpu {
         }
         fn str_r16_imm(&mut self){ //Properly LD r16 imm16
             let reg_pair:DoubleReg = match self.current_command{
-                0x01 => Registers::BC,
-                0x11 => Registers::DE,
-                0x21 => Registers::HL,
-                0x31 => Registers::SP,
-                _ => panic("Failure at mapping for str_r16_imm on line 179")
+                0x01 => Registers::DoubleReg::BC,
+                0x11 => Registers::DoubleReg::DE,
+                0x21 => Registers::DoubleReg::HL,
+                0x31 => Registers::DoubleReg::SP,
+                _ => panic("Failure at mapping for str_r16_imm")
             }
             self.registers.set_double_register(reg_pair,self.memory.grab_memory_16()) 
             //This may actually also be like... just run str r8 imm twice.
@@ -200,8 +200,18 @@ mod cpu {
         }
         fn inc_r8(&mut self){
             let reg_pair:SingleReg = match self.current_command{
-                0x04=>Registers::SingleReg::B
-                0
+                0x04=>Registers::SingleReg::B,
+                0x0C=>Registers::SingleReg::C,
+                0x14=>Registers::SingleReg::D,
+                0x1C=>Registers::SingleReg::E,
+                0x24=>Registers::SingleReg::H, 
+                0x2C=>Registers::SingleReg::L,
+                0x34=>{
+                    self.wait(8); //See if this is standard
+                    Registers::SingleReg::memptr;
+                }
+                0x3C=>Registers::SingleReg::A
+
             }
             self.wait(4)
         }
