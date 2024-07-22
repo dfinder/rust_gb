@@ -199,20 +199,11 @@ mod cpu {
             self.wait(8)
         }
         fn inc_r8(&mut self){
-            let reg_pair:SingleReg = match self.current_command{
-                0x04=>Registers::SingleReg::B,
-                0x0C=>Registers::SingleReg::C,
-                0x14=>Registers::SingleReg::D,
-                0x1C=>Registers::SingleReg::E,
-                0x24=>Registers::SingleReg::H, 
-                0x2C=>Registers::SingleReg::L,
-                0x34=>{
-                    self.wait(8); //See if this is standard
-                    Registers::SingleReg::memptr;
-                }
-                0x3C=>Registers::SingleReg::A
-
+            let reg:SingleReg = self.registers.r8_op_mid(self.current_command);
+            if reg == Registers::SingleReg::memptr{
+                self.wait(8)
             }
+            self.registers.change_single_register(reg,&|x| x+1);
             self.wait(4)
         }
         fn inc_r16(&mut self){

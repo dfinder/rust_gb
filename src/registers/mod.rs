@@ -46,6 +46,7 @@ mod registers {
         L:u8;
         SP:u16; 
         PC:u16;
+        
     }
     impl registers{
         fn get_acc(&mut self) -> u8{
@@ -82,6 +83,7 @@ mod registers {
                     (self.H as u16 ) * 0x80 + self.L - 1
                     self.decrement_hl();
                 }
+                
             }
         }
         fn get_flag(&mut self, Flag flag) -> bool {
@@ -159,6 +161,69 @@ mod registers {
                 5 => SingleReg::L
                 6 => SingleReg::memptr
                 7 => SingleReg::A 
+            }
+        }
+        fn change_single_register(&mut self, SingleReg reg, &dyn Fn(u8)->u8 fun){
+            self.set_single_register(reg,fun(self.get_single_register(reg)))
+        }
+        fn apply_fun_to_acc(&mut self, SingleReg reg, &dyn Fn(u8,u8)->u8 fun){
+            let acc:u8 = get_single_register(SingleReg::A)
+            let reg_val:u8 = get_single_register(reg)
+            self.set_single_register(SingleReg::A,fun(acc,reg_val))
+        }
+        fn r8_op_mid(&mut self, u8 opcode)->SingleReg{
+            self.r8_op_end(opcode>>3)
+        }
+        fn r8_op_end(u8 opcode)->SingleReg{
+            match opcode % 8 {
+                0=>Registers::SingleReg::B,
+                1=>Registers::SingleReg::C,
+                2=>Registers::SingleReg::D,
+                3=>Registers::SingleReg::E,
+                4=>Registers::SingleReg::H, 
+                5=>Registers::SingleReg::L,
+                6=>Registers::SingleReg::memptr,
+                7=>Registers::SingleReg::A
+                _=>panic("new mathematics launching")
+            }
+        }
+        fn r16_op(u8 opcode)->SingleReg{
+            match (opcode >> 4) % 4{
+                0 => Registers::DoubleReg::BC,
+                1 => Registers::DoubleReg::DE,
+                2 => Registers::DoubleReg::HL,
+                3 => Registers::DoubleReg::SP
+                _=>panic("new mathematics launching")
+            }
+        }
+        fn r16_mem(u8 opcode)->DoubleReg{
+            match (opcode >> 4) % 4{
+                0 => Registers::DoubleReg::BC,
+                1 => Registers::DoubleReg::DE,
+                2 => Registers::DoubleReg::HLP,
+                3 => Registers::DoubleReg::HLM 
+                _=>panic("new mathematics launching")
+            }
+        }
+        fn r16_stk(u8 opcode)->DoubleReg{
+            match (opcode >> 4) % 4{
+                0 => Registers::DoubleReg::BC,
+                1 => Registers::DoubleReg::DE,
+                2 => Registers::DoubleReg::HL,
+                3 => Registers::DoubleReg::AF
+                _=>unreachable!()
+            }
+        }
+        fn bit_idx(u8 opcode)->u8{
+            (opcode >> 3) % 8
+        }
+        fn cond(&mut self,u8 opcode)->bool{
+            match (opcode >> 4) % 4{
+                0 => !self.get_flag(registers::Flag::Zero)
+                1 => self.get_flag(registers::Flag::Zero)
+                2 => !self.get_flag(registers::Flag::Carry)
+                3 => self.get_flag(registers::Flag::Carry)
+                _=>unreachable!()
             }
         }
         fn build_registers()->Self{  //Sets the initial states of registers??? 
