@@ -31,7 +31,7 @@ mod registers {
     }
     pub enum Flag{
         Zero,
-        Subtraction,
+        Neg, //Often marksed as N.
         HalfCarry,
         Carry
     } 
@@ -46,6 +46,8 @@ mod registers {
         L:u8;
         SP:u16; 
         PC:u16;
+        parent:cpu;
+        memory:&mut memory;
         
     }
     impl registers{
@@ -64,6 +66,9 @@ mod registers {
                 SingleReg::E => self.E,
                 SingleReg::F => self.F,
                 SingleReg::H => self.H,
+                SingleReg::memptr => {
+                    memory.grab_memory_8(self.get_double_register(DoubleReg::HL))
+                }
                 SingleReg::L => self.L,
             }
         }
@@ -74,25 +79,29 @@ mod registers {
                 DoubleReg::DE =>  (self.D as u16 ) * 0x80 + self.E,
                 DoubleReg::HL =>  (self.H as u16 ) * 0x80 + self.L,
                 DoubleReg::HLP => {
-                    self.increment_hl();
-                    (self.H as u16 ) * 0x80 + self.L + 1;
+                    //self.increment_hl();
+                    (self.H as u16 ) * 0x80 + self.L// + 1;
                 
                 }
 
                 DoubleReg::HLM => {
-                    (self.H as u16 ) * 0x80 + self.L - 1
-                    self.decrement_hl();
+                    //self.decrement_hl();
+                    (self.H as u16) * 0x80 + self.L//-1
+
                 }
                 
             }
         }
         fn get_flag(&mut self, Flag flag) -> bool {
             match flag{
-                Flag::Zero => ((self.F & 0x80) == 1),
-                Flag::Subtraction => ((self.F & 0x40) == 2),
-                Flag::HalfCarry => ((self.F & 0x20) == 4),
-                Flag::Carry => ((self.F & 0x10) == 8),
+                Flag::Zero => ((self.F & 0x80) == 0x80),
+                Flag::Neg => ((self.F & 0x40) == 0x40),
+                Flag::HalfCarry => ((self.F & 0x20) == 0x20),
+                Flag::Carry => ((self.F & 0x10) == 0x10),
             }
+        }
+        fn flip_carry(&mut self){
+            self.F ^= 16
         }
         fn set_single_register(&mut self, SingleReg reg, u8 val){
             match reg{ 
@@ -101,9 +110,13 @@ mod registers {
                 SingleReg::C => self.C = set ,
                 SingleReg::D => self.D = set ,
                 SingleReg::E => self.E = set ,
+                SingleReg::memptr => {
+                    memory.set_memory_8(self.get_double_register(DoubleReg::HL),val)
+                },
                 SingleReg::F => panic!("oopsie, we tried to set F"),
-                SingleReg::H => self.H = set ,
+                SingleReg::H => self.H = set,
                 SingleReg::L => self.L = set,
+                _ => !unreachable()
             }
         }
         fn set_double_register(&mut self, DoubleReg reg, u16 val) -> u16{
@@ -122,22 +135,38 @@ mod registers {
                     self.H = (val >> 8) as u8;
                     self.L = val as u8;
                 },
-                DoubleReg::SP => self.SP=val ,
-                DoubleReg::PC => self.PC=val ,
+                DoubleReg::HLP => {
+                    val = self.H << 8 + self.L+1
+                    self.H = (val >> 8) as u8;
+                    self.L = val as u8;
+                }
+                DoubleReg::HLm => {
+                    val = self.H << 8 + self.L-1
+                    self.H = (val >> 8) as u8;
+                    self.L = val as u8;
+                }
+                DoubleReg::SP => self.SP=val,
+                DoubleReg::PC => self.PC=val,
             }
         }
         fn set_flag(&mut self, Flag flag) -> bool {
             self.F |= match flag{
                 Flag::Zero => 128 
-                Flag::Subtraction => 64
+                Flag::Neg => 64
                 Flag::HalfCarry => 32
                 Flag::Carry => 16
             }
         }
+        fn set_flags(&mut self, bool zero, bool neg, bool hc, bool carry){
+            
+        }
+        //fn dec_hl(&mut self){
+         //   change_double_register
+        //}
         fn unset_flag(&mut self, Flag flag) -> bool {
             self.F &= match flag{
                 Flag::Zero => 0x7F
-                Flag::Subtraction => 0xBF
+                Flag::Neg => 0xBF
                 Flag::HalfCarry => 0xDF
                 Flag::Carry => 0xEF 
             }
@@ -166,6 +195,9 @@ mod registers {
         fn change_single_register(&mut self, SingleReg reg, &dyn Fn(u8)->u8 fun){
             self.set_single_register(reg,fun(self.get_single_register(reg)))
         }
+        fn change_double_register(&mut self, DoubleReg reg, &dyn Fn(u16)->u16 fun){
+            self.set_double_register(reg,fun(self.get_double_register(reg)))
+        }
         fn apply_fun_to_acc(&mut self, SingleReg reg, &dyn Fn(u8,u8)->u8 fun){
             let acc:u8 = get_single_register(SingleReg::A)
             let reg_val:u8 = get_single_register(reg)
@@ -184,16 +216,16 @@ mod registers {
                 5=>Registers::SingleReg::L,
                 6=>Registers::SingleReg::memptr,
                 7=>Registers::SingleReg::A
-                _=>panic("new mathematics launching")
+                _=>!unreachable()
             }
         }
-        fn r16_op(u8 opcode)->SingleReg{
+        fn r16_op(u8 opcode)->DoubleReg{
             match (opcode >> 4) % 4{
                 0 => Registers::DoubleReg::BC,
                 1 => Registers::DoubleReg::DE,
                 2 => Registers::DoubleReg::HL,
                 3 => Registers::DoubleReg::SP
-                _=>panic("new mathematics launching")
+                _=>!unreachable()
             }
         }
         fn r16_mem(u8 opcode)->DoubleReg{
@@ -202,7 +234,7 @@ mod registers {
                 1 => Registers::DoubleReg::DE,
                 2 => Registers::DoubleReg::HLP,
                 3 => Registers::DoubleReg::HLM 
-                _=>panic("new mathematics launching")
+                _=>!unreachable()
             }
         }
         fn r16_stk(u8 opcode)->DoubleReg{
@@ -216,6 +248,9 @@ mod registers {
         }
         fn bit_idx(u8 opcode)->u8{
             (opcode >> 3) % 8
+        }
+        fn get_bit(&mut self, SingleReg reg, u8 idx){
+            return (self.registers.get_single_register(reg) & (1<<idx)) == (1<<idx)
         }
         fn cond(&mut self,u8 opcode)->bool{
             match (opcode >> 4) % 4{
@@ -237,7 +272,9 @@ mod registers {
                 H:0;
                 L:0;
                 SP:0; 
-                PC:0;  
+                PC:0;
+                parent:&mut cpu;
+                memory:&mut memory;
             }
         }
 }
