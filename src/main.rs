@@ -3,6 +3,9 @@ use winit::*;
 use glium::*;
 use crate::screen::screen::display_screen;
 #[macro_use]
+pub mod cpu;
+pub mod registers;
+pub mod memory;
 extern crate glium;
 fn main() {
     
