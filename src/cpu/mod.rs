@@ -1,182 +1,202 @@
-use std::{thread,time};
-mod cpu { 
-        const CLOCK_PERIOD: time::duration = Duration::from_nanos(239)
-        public struct fun_find{
-            mask:u8;
-            value:u8;
-            function:&dyn Fn(&mut self,arg)->bool;//,argument Arg. returns false if we have a longer wait.
-            //What if we had this as self, input, output, 
-            wait:u8;
-            wait_cond:Optional<u8>;
-            flags: FlagS;
-            bytes: u8;//1,2,3, measures the enums.
-        }
-        enum FlagR{
-            Set,
-            Unset,
-            Keep, 
-            Function(&dyn Fn()->bool) //What should the argument here be?
-        }
-        enum FlagT{
-            ClearAll,
-            KeepAll,
-            Specific([FlagRelation;4]) //Nah this is dumb.
-        }
-        enum InterruptState{
-            Enabled;
-            AlmostEnabled;
-            AlmostDisabled;
-            Disabled;
-        }
-        enum Arg{
-            SingleReg(Registers::SingleReg),
-            DoubleReg(Registers::DoubleReg),
-            //PairSingleReg(Registers::SingleReg,Registers:SingleReg)
-            MemReg(Registers::DoubleReg),
-            StackReg(Registers::DoubleReg),
-            Con(bool),
-            Imm8(u8),
-            Imm16(u16),
-            Arg_Nest(Box<Arg>,Box<Arg>)
-            Empty
-        }
-        public struct cpu{
-            registers:register_set;
-            memory_reference:memory;
-            function_lookup:[fun_find;64];
-            cblock_lookup:[fun_find;11];
-            current_command:u8;
-            //used for mem reads to HL, failed conditional jumps
-            //argument:Argument;
-        }
-        fn instantiate_cpu() -> Self{
-            registers=registers::build_registers()
-            memory= memory::build_memory()
-            current_command = 0x00; //initalize to a noop
-            function_lookup = [
-                //Block 1,
-                fun_find{0xff,0x00,self.nop,1,Empty}, //!
-                fun_find{0xcf,0x01,self.str_r16_imm,3,Empty},  //!
-                fun_find{0xcf,0x02,self.str_addr_acc,2,Empty}, //!
-                fun_find{0xcf,0x03,self.inc_r16,2,Empty},//!
-                fun_find{0xc7,0x04.self.inc_r8,1,Empty},//!
-                fun_find{0xc7,0x05.self.dec_r8,1,Empty},//!
-                fun_find{0xc7,0x06,self.str_r8_imm,2,Empty}, //note, both loads and stores are ld, so this is ld_r8_imm8
-                fun_find{0xff,0x07,self.rlca,1,Empty},//!
-                fun_find{0xff,0x08,self.ld_imm_sp,4,Empty},//!
-                fun_find{0xcf,0x09,self.add_hl,2,Empty},//
-                fun_find{0xcf,0x0a,self.ld_acc_addr,5,Empty},//!
-                fun_find{0xcf,0x0b,self.dec16,2,Empty},//!
-                fun_find{0xff,0x0f,self.rrca,1,Empty},//!
-                fun_find{0xff,0x1f,self.rra,1,Empty},//!
-                fun_find{0xff,0x2f,self.cpl,1,None},//!
-                fun_find{0xff,0x3f,self.ccf,1,None},//!
-                fun_find{0xff,0x17,self.rla,1,None},//!
-                fun_find{0xff,0x18,self.jr_imm},//?
-                fun_find{0xe7,0x20,self.jr_cond},//
-                fun_find{0xff,0x27,self.daa},//?
-                fun_find{0xff,0x37,self.scf,1,None},//!
-                fun_find{0xff,0x10,self.stop},//?   
-                fun_find{0xff,0x76,self.halt},//?
-                fun_find{0xc0,0x40,self.ld_r8_r8,1,Some(2)},
-                //block2,
-                fun_find{0xf8,0x80,self.add_r8,1,None},
-                fun_find{0xf8,0x88,self.adc_r8},
-                fun_find{0xf8,0x90,self.sub_r8},
-                fun_find{0xf8,0x98,self.subc_r8},
-                fun_find{0xf8,0xa0,self.and_r8},
-                fun_find{0xf8,0xa8,self.xor_r8},
-                fun_find{0xf8,0xb0,self.or_r8},
-                fun_find{0xf8,0xb8,self.cp_r8},
-                //block 3,
-                fun_find{0xff,0xc6,self.add_imm},
-                fun_find{0xff,0xce,self.adc_imm},
-                fun_find{0xff,0xd6,self.sub_imm},
-                fun_find{0xff,0xde,self.subc_imm},
-                fun_find{0xff,0xe6,self.and_imm},
-                fun_find{0xff,0xee,self.xor_imm},
-                fun_find{0xff,0xf6,self.or_imm},
-                fun_find{0xff,0xfe,self.cp_imm},
 
-                fun_find{0xe7,0xc0,self.ret_cond},
-                fun_find{0xff,0xc9,self.ret},
-                fun_find{0xff,0xd9,self.reti},
-                fun_find{0xe7,0xc2,self.jp_cond_imm},
-                fun_find{0xff,0xc3,self.jp_imm},
-                fun_find{0xff,0xc9,self.jp_hl},
-                fun_find{0xe7,0xc4,self.call_cond},
-                fun_find{0xff,0xcd,self.call_imm},
-                fun_find{0xe7,0xc7,self.rst},
-                fun_find{0xcf,0xc1,self.pop},
-                fun_find{0xcf,0xc5,self.push},
+
+pub mod cpu { 
+    use crate::registers::registers::{self, SingleReg};
+    use crate::registers::registers::*;
+
+    use std::{thread,time};
+    use std::time::Duration;
+    use crate::memory::memory::MemoryStruct;
+    const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
     
-                fun_find{0xff,0xcb,self.cb_block},
-                
-                fun_find{0xff,0xe2,self.ldh_c},
-                fun_find{0xff,0xe0,self.ldh_imm8},
-                fun_find{0xff,0xeb,self.ldh_imm16},
-                fun_find{0xff,0xf2,self.ldh_c},
-                fun_find{0xff,0xf0,self.ldh_imm8},
-                fun_find{0xff,0xfb,self.ldh_imm16},
+    /*enum FlagR{
+        Set,
+        Unset,
+        Keep, 
+        Function(&dyn Fn()->bool) //What should the argument here be?
+    }
+    enum FlagT{
+        ClearAll,
+        KeepAll,
+        Specific([FlagR;4]) //Nah this is dumb.
+    }*/
+    enum InterruptState{
+        AlmostEnabled,
+        Enabled,
+        AlmostDisabled,
+        Disabled,
+    }
 
-                fun_find{0xff,0xe8,self.add_sp_imm8},
-                fun_find{0xff,0xf8,self.ld_hl_imm8},
-                fun_find{0xff,0xf8,self.ld_sp_hl},
-                fun_find{0xff,0xf3,self.di},
-                fun_find{0xff,0xf8,self.ei}
-            ]
-            self.cb_block_lookup = [
-                fun_find{0xf8,0x00,self.rlc_r8,2,Empty},
-                fun_find{0xf8,0x08,self.rrc_r8,2,Empty},
-                fun_find{0xf8,0x10,self.rl_r8},
-                fun_find{0xf8,0x18,self.rr_r8},
-                fun_find{0xf8,0x20,self.sla_r8}
-                fun_find{0xf8,0x28,self.sra_r8}
-                fun_find{0xf8,0x30,self.swap_r8}
-                fun_find{0xf8,0x38,self.srl_r8}
-                fun_find{0xc0,0x40,self.bit}
-                fun_find{0xc0,0x80,self.res}
-                fun_find{0xc0,0x90,self.set}
-            ]
-            
+    pub struct CpuStruct{
+        reg_set: RegStruct,
+        memory_ref:&'static MemoryStruct,
+        function_lookup:[FunFind;63],
+        cb_block_lookup:[FunFind;11],
+        current_command:u8
+        //Preprocess Args
+        //used for mem reads to HL, failed conditional jumps
+        //argument:Argument;
+    }
+    pub struct FunFind{
+        mask:u8,
+        value:u8,
+        function:  fn(&mut CpuStruct, Arg)->bool,//,argument Arg. returns false if we have a longer wait.
+        wait:u8,
+        wait_cond:Option<u8>,
+        //flags: FlagS,
+        //bytes: u8//1,2,3, measures the enums.
+    }
+    impl FunFind{
+        fn fun_find(mask: u8, value: u8, function:fn(&mut CpuStruct, Arg)->bool, wait:u8)->Self{
+            Self{
+                mask,
+                value,
+                function,
+                wait,
+                wait_cond:None
+            }
+        }
+        fn fun_find_w(mask: u8, value: u8, fun:fn(&mut CpuStruct, Arg)->bool, wait:u8, wait_cond:u8 )->Self{
+            Self{
+                mask: mask,
+                value:value,
+                function:fun,
+                wait:wait,
+                wait_cond: Some(wait_cond)
+            }
+        }
+    }
+    enum Arg{
+        SingleRegArg(registers::SingleReg),
+        DoubleRegArg(registers::DoubleReg),
+        //PairSingleReg(registers::SingleReg,RegStruct:SingleReg)
+        MemReg(registers::DoubleReg),
+        StackReg(registers::DoubleReg),
+        Cond(bool),
+        Imm8(u8),
+        Imm16(u16),
+        PairSingleReg(registers::SingleReg,registers::SingleReg),
+        Empty
+    }
+    impl CpuStruct{
+        fn new() -> Self{
+            let mmy: &mut MemoryStruct = &mut MemoryStruct::init_memory();
+            Self{
+                memory_ref:mmy,
+                reg_set:RegStruct::build_registers(mmy),
+                current_command:0x00, //initalize to a noop
+                function_lookup:[
+                    //Block 1,
+                    FunFind::fun_find(0xff,0x00,Self::nop,1), //done
+                    FunFind::fun_find(0xcf,0x01,Self::str_r16_imm,3),  //done
+                    FunFind::fun_find(0xcf,0x02,Self::str_addr_acc,2),
+                    FunFind::fun_find(0xcf,0x03,Self::inc_r16,2),//done
+                    FunFind::fun_find(0xc7,0x04,Self::inc_r8,1),//done
+                    FunFind::fun_find_w(0xc7,0x05,Self::dec_r8,1,2),//done
+                    FunFind::fun_find(0xc7,0x06,Self::str_r8_imm,2), //note, both loads and stores are ld, so this is ld_r8_imm8
+                    FunFind::fun_find(0xff,0x07,Self::rlca,1),//done
+                    FunFind::fun_find(0xff,0x08,Self::ld_imm_sp,5),//done
+                    FunFind::fun_find(0xcf,0x09,Self::add_hl,2),//
+                    FunFind::fun_find(0xcf,0x0a,Self::ld_acc_addr,5),//done
+                    FunFind::fun_find(0xcf,0x0b,Self::dec_r16,2),//done
+                    FunFind::fun_find(0xff,0x0f,Self::rrca,1),//done
+                    FunFind::fun_find(0xff,0x1f,Self::rra,1),//done
+                    FunFind::fun_find(0xff,0x2f,Self::cpl,1),//done
+                    FunFind::fun_find(0xff,0x3f,Self::ccf,1),//done
+                    FunFind::fun_find(0xff,0x17,Self::rla,1),//done
+                    FunFind::fun_find(0xff,0x18,Self::jr_imm,3),//?
+                    FunFind::fun_find_w(0xe7,0x20,Self::jr_cond,3,5),//
+                    FunFind::fun_find(0xff,0x27,Self::daa,1),//?
+                    FunFind::fun_find(0xff,0x37,Self::scf,1),//done
+                    FunFind::fun_find(0xff,0x10,Self::stop,0),//?   
+                    FunFind::fun_find(0xff,0x76,Self::halt,0),//?
+                    FunFind::fun_find_w(0xc0,0x40,Self::ld_r8_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0x80,Self::add_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0x88,Self::adc_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0x90,Self::sub_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0x98,Self::subc_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0xa0,Self::and_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0xa8,Self::xor_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0xb0,Self::or_r8,1,2),
+                    FunFind::fun_find_w(0xf8,0xb8,Self::cp_r8,1,2),
+                    FunFind::fun_find_w(0xff,0xc6,Self::add_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xce,Self::adc_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xd6,Self::sub_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xde,Self::subc_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xe6,Self::and_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xee,Self::xor_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xf6,Self::or_imm,1,2),
+                    FunFind::fun_find_w(0xff,0xfe,Self::cp_imm,1,2),
+                    FunFind::fun_find_w(0xe7,0xc0,Self::ret_cond,5,2),
+                    FunFind::fun_find(0xff,0xc9,Self::ret,4),
+                    FunFind::fun_find(0xff,0xd9,Self::reti,4),
+                    FunFind::fun_find_w(0xe7,0xc2,Self::jp_cond_imm,3,2),
+                    FunFind::fun_find(0xff,0xc3,Self::jp_imm,4),
+                    FunFind::fun_find(0xff,0xc9,Self::jp_hl,1),
+                    FunFind::fun_find_w(0xe7,0xc4,Self::call_cond,6,3),
+                    FunFind::fun_find_w(0xff,0xcd,Self::call_imm,6,3),
+                    FunFind::fun_find(0xe7,0xc7,Self::rst,4),
+                    FunFind::fun_find(0xcf,0xc1,Self::pop,3),
+                    FunFind::fun_find(0xcf,0xc5,Self::push,4),
+                    FunFind::fun_find(0xff,0xcb,Self::cb_block,0),
+                    FunFind::fun_find(0xff,0xe2,Self::ldh_c,1),
+                    FunFind::fun_find(0xff,0xe0,Self::ldh_imm8,2),
+                    FunFind::fun_find(0xff,0xeb,Self::ldh_imm16,3),
+                    FunFind::fun_find(0xff,0xf2,Self::str_c,1),
+                    FunFind::fun_find(0xff,0xf0,Self::str_imm8,2),
+                    FunFind::fun_find(0xff,0xfb,Self::str_imm16,3),
+                    FunFind::fun_find(0xff,0xe8,Self::add_sp_imm8,4), //
+                    FunFind::fun_find(0xff,0xf8,Self::ld_hl_imm8,3),
+                    FunFind::fun_find(0xff,0xf8,Self::ld_sp_hl,2),
+                    FunFind::fun_find(0xff,0xf3,Self::di,1),
+                    FunFind::fun_find(0xff,0xf8,Self::ei,1)
+                ],
+                cb_block_lookup:[
+                    FunFind::fun_find_w(0xf8,0x00,Self::rlc_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x08,Self::rrc_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x10,Self::rl_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x18,Self::rr_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x20,Self::sla_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x28,Self::sra_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x30,Self::swap_r8,2,4),
+                    FunFind::fun_find_w(0xf8,0x38,Self::srl_r8,2,4),
+                    FunFind::fun_find_w(0xc0,0x40,Self::bit,2,3),
+                    FunFind::fun_find_w(0xc0,0x80,Self::res,2,4),
+                    FunFind::fun_find_w(0xc0,0x90,Self::set,2,4)
+                ]
+            }//Find a different way of doing this:
+            //Break things apart according to our old pipeline model
         }
         fn get_double_register_from_opcode(){
 
         }
-        fn process_single_arg(Arg arg)->SingleReg{
-            reg = match arg{
-                SingleReg(reg) => reg
-                _ => !unreachable()
-            }
-            reg 
-        }
-        fn get_arg_val(Arg arg){ //Holy mother of polymorphism
+        fn get_arg_val(arg:Arg){ //Holy mother of polymorphism
 
         }
         fn interpret_command(&mut self){
             //my_pc = self.register_set.PC;
-            let current_command:u8 = self.memory.grab_memory_8(self.registers.increment_pc());
+            let current_command:u8 = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1));
             //let first_two:u8 = current_command >> 6
             //static masks:[u8]=[0xFF,0xCF,0xE7,0xC0,0xC7,0xF8]
             let mut taken:bool = false;
-            for x in function_lookup{
+            for x in self.function_lookup{
                 if current_command & x.mask == x.value{
-                    let argument:Argument = match x.mask{
-                        0xff => Arg::Empty
-                        0xcf => get_double_register_from_opcode(current_command)
-                        0xe7 => Arg::Cond(self.registers.get_cond(current_command))
-                        0xc0 => Arg::Pair(self.registers.r8_op_mid(),self.registers.r8_op_end())
-                        0xc7 => Arg::
-                        0xf8 => r8_end
-                
-                        let reg_pair:DoubleReg = self.registers.r16_op(self.current_command);
-                    }**/
-                    let mut result:bool = self.x.function(argument)
-                    if self.x.function(){
+                    let argument:Arg = match x.mask{
+                        0xff => Arg::Empty,
+                        0xcf => Arg::DoubleRegArg(self.reg_set.r16_op(current_command)),
+                        0xe7 => Arg::Cond(self.reg_set.get_cond(current_command)),
+                        0xc0 => Arg::PairSingleReg(self.reg_set.r8_op_mid(current_command),self.reg_set.r8_op_end(current_command)),
+                        0xc7 => Arg::SingleRegArg(self.reg_set.r8_op_mid(current_command)),
+                        0xf8 => Arg::SingleRegArg(self.reg_set.r8_op_end(current_command)),
+                        _ => unreachable!()
+                        //let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
+                    };
+                    let mut result:bool = (x.function)(self,argument);
+                    if (x.function)(self,argument){
                         self.wait(x.wait);
 
                     }else{
-                        self.wait(x.cond_wait);
+                        self.wait(x.wait_cond.unwrap());
                     }; //Evaluate for sanity
 
                     taken=true;
@@ -186,289 +206,311 @@ mod cpu {
             if !taken{
                 panic!("we didn't do anything!")
             }
-            //self.registers.increment_pc()
+            //self.reg_set.increment_pc()
 
         }
         
-        fn no_op(&mut self)->bool{
+        fn nop(&mut self, arg:Arg)->bool{
             true
         }
 
-        fn ld_imm_sp(&mut self){
-            self.registers.set_double_register(Registers::DoubleReg::SP,self.memory.grab_memory_16(self.registers.increment_pc()));
-            self.registers.increment_pc(1);
+        fn ld_imm_sp(&mut self,arg:Arg)->bool{
+            self.reg_set.set_double_register(registers::DoubleReg::SP,self.memory_ref.grab_memory_16(self.reg_set.increment_pc(1)));
+            self.reg_set.increment_pc(1);
+            true
         }
-        fn rrc_r8(&mut self, Arg arg)->bool{
+        fn rrc_r8(&mut self, arg:Arg)->bool{
             let arg_reg = match arg{
-                SingleReg(reg) => reg
-                _ => !unreachable()
-            }
-            self.registers.set_carry(self.registers.get_bit(arg_reg, 0)); //Rotate right
-            self.registers.change_single_register(arg_reg, &|x| x.rotate_right(1));
+                Arg::SingleRegArg(reg) => reg,
+                _ => unreachable!()
+            };
+            if self.reg_set.get_bit(arg_reg, 0){
+                self.reg_set.set_flag(Flag::Carry); //Rotate right
+            } //Rotate right
+            self.reg_set.change_single_register(arg_reg, &|x| x.rotate_right(1));
+            true
         }
-        fn rrca(&mut self,Arg arg)->bool{
-            self.rrc_r8(Arg::SingleReg(Registers::SingleReg::A))
+        fn rrca(&mut self,arg:Arg)->bool{
+            self.rrc_r8(Arg::SingleRegArg(registers::SingleReg::A))
         }
-        fn rlc_r8(&mut self, Arg arg) -> bool{
+        fn rlc_r8(&mut self, arg:Arg) -> bool{
             let arg_reg = match arg{
-                SingleReg(reg) => reg
-                _ => !unreachable()
+                Arg::SingleRegArg(reg) => reg,
+                _ => unreachable!()
+            };
+            if self.reg_set.get_bit(arg_reg, 7){
+                self.reg_set.set_flag(Flag::Carry,); //Rotate right
             }
-            self.registers.set_carry(self.registers.get_bit(arg_reg, 7)); //Rotate right
-            self.registers.change_single_register(arg_reg, &|x| x.rotate_left(1));
+            self.reg_set.change_single_register(arg_reg, &|x| x.rotate_left(1));
+            true
         }
-        fn rlca(&mut self, Arg arg)->bool{
-            self.rlc_r8(Arg::SingleReg(Registers::SingleReg::A));
+        fn rlca(&mut self, arg:Arg)->bool{
+            self.rlc_r8(Arg::SingleRegArg(registers::SingleReg::A));
+            return true
         }
-        fn rla(&mut self){ //Rotate register a to the left _through_ the carry bti .
-            let carry:bool = self.registers.get_carry();
-            let top:bool = self.registers.get_bit(Registres::SingleReg::A,7);
-            self.registers.set_carry(top);
-            self.change_single_register(Registers::SingleReg::A, &|x| x<<1 + carry); //Check to see if I need wrapping left shi
-            self.wait(1);
+        fn rla(&mut self, arg:Arg)->bool{ //Rotate register a to the left _through_ the carry bti .
+            let carry:bool = self.reg_set.get_flag(Flag::Carry);
+            let top:bool = self.reg_set.get_bit(SingleReg::A,7);
+            if top{
+                self.reg_set.set_flag(Flag::Carry);
+            }
+            self.reg_set.change_single_register(registers::SingleReg::A, &|x| x<<1 + (carry as u8)); //Check to see if I need wrapping left shi
+            true
         }
-        fn rra(&mut self,Arg arg)->bool{ //Need to rewrite.
-            let carry:bool = self.registers.get_carry();
-            let bottom:bool = self.registers.get_bit(Registers::SingleReg::A, 0)
-            self.registers.set_carry(bottom)
-            self.registers.change_single_register(Registers::SingleReg::A, &|x| x>>1 + carry<<7)
-            self.wait(1) 
+        fn rra(&mut self,arg:Arg)->bool{ //Need to rewrite.
+            let carry:bool = self.reg_set.get_flag(Flag::Carry);
+            let bottom:bool = self.reg_set.get_bit(registers::SingleReg::A, 0);
+            if bottom{
+                self.reg_set.set_flag(Flag::Carry);
+            }
+            self.reg_set.change_single_register(registers::SingleReg::A, &|x| (x>>1) + ((carry as u8)<<7));
+            true
         }
-        fn jr_imm(&mut self)->bool{
-            let next_value: 18 = (self.memory.grab_memory_8(self.registers.increment_pc()) as i8);
-            self.registers.change_double_register(registers::DoubleReg::PC, &|x| x.wrapping_add(next_value);
-            self.wait(3)
+        fn jr_imm(&mut self, arg:Arg)->bool{
+            let next_value:i8 = (self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1)) as i8);
+            self.reg_set.change_double_register(registers::DoubleReg::PC, &|x| x.wrapping_add_signed(next_value.into()));
+            true
         }
-        fn jr_cond(&mut self, Arg arg)->bool{
-            if !self.registers.get_cond(self.current_command){
+        fn jr_cond(&mut self, arg:Arg)->bool{
+            if !self.reg_set.get_cond(self.current_command){
                 false
             }
             else{
-                self.jr_imm()
+                self.jr_imm(arg)
             }
         }
-        fn daa(&mut self, Arg arg)->bool{
-            let subtract = registers.get_flag_bit(registers::Flag::Neg);
-            let hcarry = registers.get_flag_bit(registers::Flag::HalfCarry);
-            let carry = registers.get_flag_bit(registers::Flag::Carry);
+        fn daa(&mut self, arg:Arg)->bool{
+            let subtract = self.reg_set.get_flag(registers::Flag::Neg);
+            let hcarry = self.reg_set.get_flag(registers::Flag::HalfCarry);
+            let carry = self.reg_set.get_flag(registers::Flag::Carry);
             
             //To complete
-        }
-
-        fn str_r16_imm(&mut self, Arg arg)->bool{ //Properly LD r16 imm16
-            let reg_pair:DoubleReg = self.registers.r16_op(self.current_command);
-            self.registers.set_double_register(reg_pair,self.memory.grab_memory_16()) 
-            //This may actually also be like... just run str r8 imm twice.
-            self.wait(3)
-        }
-        fn str_addr_acc(&mut self, Arg arg)->bool{
-            let reg_pair:DoubleReg = self.registers.r16_mem(self.current_command);
-            self.memory.set_memory_8(self.registers.get_double_register(reg_pair),self.registers.get_acc())
-        }
-        fn inc_r8(&mut self, Arg arg)->bool{
-            let reg:SingleReg = match arg{
-                SingleReg(rg)=>rg;
-                _ => !unreachable()
-            } //self.registers.r8_op_mid(self.current_command);
-            self.registers.change_single_register(reg, &|x| x+1);
-            reg != Registers::SingleReg::memptr
-        }
-        fn dec_r8(&mut self, Arg arg)->bool{
-            let reg:SingleReg = self.registers.r8_op_mid(self.current_command);
-            if reg == Registers::SingleReg::memptr{
-                self.wait(2);
-            }
-            self.registers.change_single_register(reg, &|x| x-1);
-            self.wait(1)
-        }
-        fn inc_r16(&mut self, Arg arg)->bool{
-            let reg_pair:DoubleReg = self.registers.r16_op(self.current_command);
-            self.registers.change_double_register(reg_pair,&|x| x+1);
-        }
-        fn dec_r16(&mut self, Arg arg)->bool{
-            let reg_pair:DoubleReg = self.registers.r16_op(self.current_command);
-            self.registers.change_double_register(reg_pair,&|x| x-1);
-        };
-        fn str_r8_imm(&mut self, Arg arg)->bool{
-            let reg:SingleReg = self.registers.r8_op_mid(self.current_command);
-            let imm:u8 = self.memory.grab_memory_8(self.registers.increment_pc())
-            self.registers.set_single_register(reg,imm)
-        }
-        fn ld_imm_sp(&mut self, Arg arg)->bool{
-            self.memory.grab_memory_16(self.registers.increment_pc());
-            self.registers.increment_pc()
-            self.memory.set_memory_16(self.registers.get_double_register(Registers::DoubleReg::SP))
-        }
-        fn ld_r8_r8(&mut self, Arg arg ){
-            let reg_dest, reg_src, = match arg{
-                Arg::PairSingleReg(reg1,reg2) => reg1,reg2
-                _ => !unreachable()
-            }
-            self.registers.set_single_register(reg_dest,self.registers.get_register(reg_src));
-        
-            return reg_src != Registers::SingleReg::memptr && reg_dest != Registers::SingleReg::memptr
-        }
-        fn ld_acc_addr(&mut self, Arg arg)->bool{ //Load from address into accumulator. Kinda similar to LD 7 6 0101110110
-            let reg:DoubleReg = self.registers.r16_mem(self.current_command);
-            self.set_acc(self.memory.grab_memory_8(reg))
-            if reg == DoubleReg::HLP || reg == DoubleReg::HLM{
-                self.registers.set_double_register(reg,0);
-            }
-        }
-        fn add_hl(&mut self, Arg arg)->bool{
-            let reg_pair:DoubleReg = self.registers.r16_op(self.current_command);
-            let double_reg_val:u16 = self.registers.get_double_register(reg_pair);
-            self.registers.change_double_register(Register::DoubleReg::HL, &|x|x+double_reg_val));
-            //TODO: Flags
-        }
-
-        fn cpl(&mut self, Arg arg)->bool{ //Invert A
-            self.registers.change_single_register(Registers::SingleReg::A,&|x| !a)
-            self.registers.set_flag(Registers::Flags::HalfCarry)
-            self.registers.set_flag(Registers::Flags::Neg)
-        }
-        fn ccf(&mut self, Arg arg)->bool{
-            self.registers.flip_carry();
             true
         }
-        fn scf(&mut self, Arg arg)->bool{
-            self.registers.set_flag(Registers::Flags::Carry);
-        }
-        fn add_r8(&mut self, Arg arg)->bool{ 
-            self.registers.apply_fun_to_acc(arg_reg, &|x|x+self.registers.get_register(process_single_arg(arg)))
-        } 
-        fn adc_r8(&mut self, Arg arg)->bool{
-            let arg_reg = process_single_arg();
-            let carry = self.registers.get_flag(Registers::Flag::Carry)
-            self.registers.apply_fun_to_acc(arg_reg, &|x|x+carry+self.registers.get_register(arg_reg))
-        } 
-        fn sub_r8(&mut self, Arg arg)->bool{
-            self.registers.apply_fun_to_acc(arg_reg, &|x|x-self.registers.get_register(process_single_arg(arg)))
-        }
-        fn subc_r8(&mut self, Arg arg)->bool{
-            let arg_reg = process_single_arg();
-            let carry = self.registers.get_flag(Registers::Flag::Carry);
-            self.registers.apply_fun_to_acc(arg_reg, &|x| x+carry+self.registers.get_register(arg_reg))
-        } 
-        fn and_r8(&mut self, Arg arg)->bool{
-            self.registers.apply_fun_to_acc(arg_reg, &|x| x&self.registers.get_register(process_single_arg(arg)))
-        } 
-        fn or_r8(&mut self, Arg arg)->bool{
-            self.registers.apply_fun_to_acc(arg_reg, &|x| x|self.registers.get_register(process_single_arg(arg)))
-        }
-        fn cp_r8(&mut self, Arg arg)->bool{
-            let arg_reg = get_arg_val_single(arg);
-            let acc = self.registers.get_register(Registers::SingleReg::A);
 
-            self.registers.set_flags((arg_reg-acc == 0),true,(#Figure out the half carry flag ),(arg_reg>a))
-            //self.registers.apply_fun_to_acc(arg_reg, &|x|x&self.registers.get_register(process_single_arg(arg)))
+        fn str_r16_imm(&mut self, arg:Arg)->bool{ //Properly LD r16 imm16
+            let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
+            self.reg_set.set_double_register(reg_pair,self.memory_ref.grab_memory_16(self.reg_set.get_double_register(reg_pair)));
+            //This may actually also be like... just run str r8 imm twice.
+            true
+        }
+        fn str_addr_acc(&mut self, arg:Arg)->bool{
+            let reg_pair:DoubleReg = self.reg_set.r16_mem(self.current_command);
+            self.memory_ref.set_memory_8(self.reg_set.get_double_register(reg_pair),self.reg_set.get_acc());
+            true
+        }
+        fn inc_r8(&mut self, arg:Arg)->bool{
+            let reg:SingleReg = match arg{
+                Arg::SingleRegArg(rg)=>rg,
+                _ => unreachable!()
+            }; //self.reg_set.r8_op_mid(self.current_command);
+            self.reg_set.change_single_register(reg, &|x| x+1);
+            !matches!(reg,SingleReg::Memptr)
+        }
+        fn dec_r8(&mut self, arg:Arg)->bool{
+            let reg:SingleReg = self.reg_set.r8_op_mid(self.current_command);
+            self.reg_set.change_single_register(reg, &|x| x-1);
+            !matches!(reg,SingleReg::Memptr)
+        }
+        fn inc_r16(&mut self, arg:Arg)->bool{
+            let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
+            self.reg_set.change_double_register(reg_pair,&|x| x+1);
+            true
+        }
+        fn dec_r16(&mut self, arg:Arg)->bool{
+            let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
+            self.reg_set.change_double_register(reg_pair,&|x| x-1);
+            true
+        }
+        fn str_r8_imm(&mut self, arg:Arg)->bool{
+            let reg:SingleReg = self.reg_set.r8_op_mid(self.current_command);
+            let imm:u8 = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1));
+            self.reg_set.set_single_register(reg,imm);
+            true
+        }
+        fn ld_r8_r8(&mut self, arg:Arg)->bool{
+            let (reg_dest, reg_src) = match arg{
+                Arg::PairSingleReg( reg1,reg2) => (reg1,reg2),
+                _ => unreachable!()
+            };
+            self.reg_set.set_single_register(reg_dest,self.reg_set.get_register(reg_src));
+        
+            return !matches!(reg_src,SingleReg::Memptr) && !matches!(reg_dest,SingleReg::Memptr)
+        }
+        fn ld_acc_addr(&mut self, arg:Arg)->bool{ //Load from address into accumulator. Kinda similar to LD 7 6 0101110110
+            let reg:DoubleReg = self.reg_set.r16_mem(self.current_command);
+            self.reg_set.set_acc(self.memory_ref.grab_memory_8(self.reg_set.get_double_register(reg)));
+            if matches!(reg,DoubleReg::HLP) || matches!(reg,DoubleReg::HLM) {
+                self.reg_set.set_double_register(reg,0);
+            }
+            true
+        }
+        fn add_hl(&mut self, arg:Arg)->bool{
+            let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
+            let double_reg_val:u16 = self.reg_set.get_double_register(reg_pair);
+            self.reg_set.change_double_register(DoubleReg::HL, &|x|x+double_reg_val);
+            //TODO: Flags
+            true
+        }
+
+        fn cpl(&mut self, arg:Arg)->bool{ //Invert A
+            self.reg_set.change_single_register(SingleReg::A,&|x| !x);
+            self.reg_set.set_flag(Flag::HalfCarry);
+            self.reg_set.set_flag(Flag::Neg);
+            true
+        }
+        fn ccf(&mut self, arg:Arg)->bool{
+            self.reg_set.flip_carry();
+            true
+        }
+        fn scf(&mut self, arg:Arg)->bool{
+            self.reg_set.set_flag(Flag::Carry);
+            true
+        }
+        fn add_r8(&mut self, arg:Arg)->bool{ 
+            self.reg_set.apply_fun_to_acc(arg, &|x|x+self.reg_set.get_register(process_single_arg(arg)))
         } 
-        fn add_imm(&mut self, Arg arg)->bool{
-        }
-        fn adc_imm(&mut self, Arg arg)->bool{
-        }
-        fn sub_imm(&mut self, Arg arg)->bool{
-        }
-        fn subc_imm(&mut self, Arg arg)->bool{
-        }
-        fn and_imm(&mut self, Arg arg)->bool{
-        }
-        fn or_imm(&mut self, Arg arg)->bool{
-        }
-        fn cp_imm(&mut self, Arg arg)->bool{
-        }
-        fn ret_cond(&mut self, Arg arg)->bool{
+        fn adc_r8(&mut self, arg:Arg)->bool{
+            let arg_reg = process_single_arg();
+            let carry = self.reg_set.get_flag(Flag::Carry);
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x|x+carry+self.reg_set.get_register(arg_reg))
         } 
-        fn ret(&mut self, Arg arg)->bool{
+        fn sub_r8(&mut self, arg:Arg)->bool{
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x|x-self.reg_set.get_register(process_single_arg(arg)))
         }
-        fn reti(&mut self, Arg arg)->bool{
+        fn subc_r8(&mut self, arg:Arg)->bool{
+            let arg_reg = process_single_arg();
+            let carry = self.reg_set.get_flag(Flag::Carry);
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x| x+carry+self.reg_set.get_register(arg_reg))
         } 
-        fn jp_cond_imm(&mut self, Arg arg)->bool{
+        fn and_r8(&mut self, arg:Arg)->bool{
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x| x&self.reg_set.get_register(process_single_arg(arg)))
         } 
-        fn jp_imm(&mut self, Arg arg)->bool{
+        fn xor_r8(&mut self, arg:Arg)->bool{
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x| x^self.reg_set.get_register(process_single_arg(arg)))
         } 
-        fn jp_hl(&mut self, Arg arg)->bool{
-        } 
-        fn call_cond(&mut self, Arg arg)->bool{
-        } 
-        fn call_imm(&mut self, Arg arg)->bool{
-        } 
-        fn rst(&mut self, Arg arg)->bool{
+        fn or_r8(&mut self, arg:Arg)->bool{
+            self.reg_set.apply_fun_to_acc(arg_reg, &|x| x|self.reg_set.get_register(process_single_arg(arg)))
         }
-        fn pop(&mut self, Arg arg)->bool{
-        }
-        fn push(&mut self, Arg arg)->bool{
-        }
-        fn ldh_c(&mut self, Arg arg)->bool{
+        fn cp_r8(&mut self, arg:Arg)->bool{
+            let arg_reg = get_arg_val_single(arg);
+            let acc = self.reg_set.get_register(SingleReg::A);
+/*
+Figure out half carry
+*/
+            self.reg_set.set_flags((arg_reg-acc == 0),true,true,(arg_reg>a))
+            //self.reg_set.apply_fun_to_acc(arg_reg, &|x|x&self.reg_set.get_register(process_single_arg(arg)))
         } 
-        fn ldh_imm8(&mut self, Arg arg)->bool{
+        fn add_imm(&mut self, arg:Arg)->bool{
         }
-        fn ldh_imm16(&mut self, Arg arg)->bool{
+        fn adc_imm(&mut self, arg:Arg)->bool{
         }
-        fn ldh_c(&mut self, Arg arg)->bool{
-        } 
-        fn ldh_imm8(&mut self, Arg arg)->bool{
-        } 
-        fn ldh_imm16(&mut self, Arg arg)->bool{
+        fn sub_imm(&mut self, arg:Arg)->bool{
         }
-        fn add_sp_imm8(&mut self, Arg arg)->bool{
+        fn subc_imm(&mut self, arg:Arg)->bool{
         }
-        fn ld_hl_imm8(&mut self, Arg arg)->bool{
+        fn and_imm(&mut self, arg:Arg)->bool{
         }
-        fn ld_sp_hl(&mut self, Arg arg)->bool{
+        fn xor_imm(&mut self, arg:Arg)->bool{
         }
-        fn di(&mut self, Arg arg)->bool{
+        fn or_imm(&mut self, arg:Arg)->bool{
         }
-        fn ei(&mut self, Arg arg)->bool{
-        } 
-        fn rlc_r8(&mut self, Arg arg)->bool{
+        fn cp_imm(&mut self, arg:Arg)->bool{
         }
-        fn rl_r8(&mut self, Arg arg)->bool{
+        fn ret_cond(&mut self, arg:Arg)->bool{
+        } 
+        fn ret(&mut self, arg:Arg)->bool{
         }
-        fn rr_r8(&mut self, Arg arg)->bool{
+        fn reti(&mut self, arg:Arg)->bool{
         } 
-        fn sla_r8(&mut self, Arg arg)->bool{
+        fn jp_cond_imm(&mut self, arg:Arg)->bool{
         } 
-        fn sra_r8(&mut self, Arg arg)->bool{
+        fn jp_imm(&mut self, arg:Arg)->bool{
         } 
-        fn swap_r8(&mut self, Arg arg)->bool{
+        fn jp_hl(&mut self, arg:Arg)->bool{
         } 
-        fn srl_r8(&mut self, Arg arg)->bool{
+        fn call_cond(&mut self, arg:Arg)->bool{
         } 
-        fn bit(&mut self, Arg arg)->bool{
+        fn call_imm(&mut self, arg:Arg)->bool{
         } 
-        fn res(&mut self, Arg arg)->bool{
-        } 
-        fn set(&mut self, Arg arg)->bool{
+        fn rst(&mut self, arg:Arg)->bool{
         }
-        fn stop(&mut self, Arg arg)->bool{
+        fn pop(&mut self, arg:Arg)->bool{
+        }
+        fn push(&mut self, arg:Arg)->bool{
+        }
+        fn ldh_c(&mut self, arg:Arg)->bool{ //A = mem($FF00 + c)
+        } 
+        fn ldh_imm8(&mut self, arg:Arg)->bool{
+        }
+        fn ldh_imm16(&mut self, arg:Arg)->bool{
+        }
+        fn str_c(&mut self, arg:Arg)->bool{ //Store A at address $FF00+C 
+        } 
+        fn str_imm8(&mut self, arg:Arg)->bool{
+        } 
+        fn str_imm16(&mut self, arg:Arg)->bool{
+        }
+        fn add_sp_imm8(&mut self, arg:Arg)->bool{
+        //Remember, this is a signed value!
+        }
+        fn ld_hl_imm8(&mut self, arg:Arg)->bool{
+        }
+        fn ld_sp_hl(&mut self, arg:Arg)->bool{
+        }
+        fn di(&mut self, arg:Arg)->bool{
+        }
+        fn ei(&mut self, arg:Arg)->bool{
+        } 
+        fn rl_r8(&mut self, arg:Arg)->bool{
+        }
+        fn rr_r8(&mut self, arg:Arg)->bool{
+        } 
+        fn sla_r8(&mut self, arg:Arg)->bool{
+        } 
+        fn sra_r8(&mut self, arg:Arg)->bool{
+        } 
+        fn swap_r8(&mut self, arg:Arg)->bool{
+        } 
+        fn srl_r8(&mut self, arg:Arg)->bool{
+        } 
+        fn bit(&mut self, arg:Arg)->bool{
+        } 
+        fn res(&mut self, arg:Arg)->bool{
+        } 
+        fn set(&mut self, arg:Arg)->bool{
+        }
+        fn stop(&mut self, arg:Arg)->bool{
             loop {
                 self.wait(1);
                 //PAUSE THE GPU
                 //BREAK IF BUTTON PRESSED.
             }
         }
-        fn halt(&mut self, arg)->bool{
+        fn halt(&mut self, arg:Arg)->bool{
             loop { 
-                self.wait(1) //Enter low power mode until an interrupt
+                CpuStruct::wait(1) //Enter low power mode until an interrupt
             }
         }
-        fn cd_block(&mut self){
-            let current_command:u8 = self.memory.grab_memory_8(self.registers.increment_pc())
+        fn cb_block(&mut self, arg:Arg )->bool{
+            let current_command:u8 = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1));
+            let mut taken = false;
             for x in self.cb_block_lookup{
                 if current_command & x.mask == x.value{
-                    self.x.function(); //Evaluate for sanity
+                    (x.function)(self,arg); //Evaluate for sanity
                     taken=true;
                 }
             }
             if !taken{
                 panic!("we didn't do anything!")
             }
+            true
 
             //grab the next piece of memory, but we use the CB table.
         }
-        fn wait(i8 cycles){
+        fn wait(&mut self,cycles:u8){
             //4.19 mhz * 4 t cycles 
-            thread.sleep(4*CLOCK_PERIOD*cycles);
+            thread::sleep(4*CLOCK_PERIOD*cycles.into());
         }
+    }
 }
