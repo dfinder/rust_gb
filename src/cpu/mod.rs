@@ -65,7 +65,7 @@ pub mod cpu {
                 wait_cond: Some(wait_cond)
             }
         }
-    }
+    } 
     enum Arg{
         SingleRegArg(registers::SingleReg),
         DoubleRegArg(registers::DoubleReg),
@@ -209,7 +209,35 @@ pub mod cpu {
             //self.reg_set.increment_pc()
 
         }
-        
+        // A lot of these functions have a few basic cases:
+        // Function, Register|DoubleRegister, register2|doubleRegister Immediate, Memory, ImmMemory(either FF00+C or NN), cond
+        // Across an ALU with only a few functions
+        // Add,Subtract,compare, Inc, Dec, RLA,RRA,  RLCA RRCA 
+        // SCF(set carry flag) ccf(change carry flag), which are really just  bit swaps, and bitswaps[xors with masks]
+        // Grab bit
+        // push/pop, but these are just like a load, and a stack pointer operation
+        // Jump is just mapping to the PC
+        // and, or, xor, addc, subc, DAA(the 16->digital), swap, which swaps nibbles
+        //Accessing (DR) seems to take a logical cycle
+        //Accessing (nn) seems to take two, because we have the memory read for the next two instructions, then the memory read for that address
+        //call 
+        /*enum alu_reg{
+            
+        }
+        enum operand{
+            Register(alu_reg),
+            DoubleReg(alu_reg,alu_reg),
+        }*/
+
+        fn alu_add(&mut self,arg1:Arg,arg2:Arg,arg3:Arg){ //So we have like, 2 inputs, and and output 
+
+        }
+        fn alu_add(&mut self, arg:Arg) ->
+
+        } 
+
+
+
         fn nop(&mut self, arg:Arg)->bool{
             true
         }
@@ -267,7 +295,7 @@ pub mod cpu {
             true
         }
         fn jr_imm(&mut self, arg:Arg)->bool{
-            let next_value:i8 = (self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1)) as i8);
+            let next_value:i8 = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1)) as i8;
             self.reg_set.change_double_register(registers::DoubleReg::PC, &|x| x.wrapping_add_signed(next_value.into()));
             true
         }
@@ -404,6 +432,7 @@ Figure out half carry
         fn add_imm(&mut self, arg:Arg)->bool{
         }
         fn adc_imm(&mut self, arg:Arg)->bool{
+
         }
         fn sub_imm(&mut self, arg:Arg)->bool{
         }
@@ -431,7 +460,8 @@ Figure out half carry
         } 
         fn call_cond(&mut self, arg:Arg)->bool{
         } 
-        fn call_imm(&mut self, arg:Arg)->bool{
+        fn call(&mut self, arg:Arg)->bool{
+            self.reg_set.get_double_register()
         } 
         fn rst(&mut self, arg:Arg)->bool{
         }
