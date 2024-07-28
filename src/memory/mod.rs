@@ -2,6 +2,8 @@ pub mod memory{
     
     use std::fs::File;
     use std::io::Read;
+
+    use crate::cpu;
     pub struct MemoryStruct{
         my_memory:[u8;65535]
     }
@@ -16,9 +18,11 @@ pub mod memory{
              }
         }
         pub fn grab_memory_8(&mut self, addr:u16)->u8{
+            cpu::cpu::wait(2);
             self.my_memory[addr as usize]
         }
         pub fn grab_memory_16(&mut self,addr:u16)->u16{
+
             (self.my_memory[(addr+1) as usize] as u16) <<8 + (self.my_memory[addr as usize] as u16)
             //#REMEMBER THIS IS IN LITTLE ENDIAN ORDER! THE BULLSHIT ONE! WE PUT THE SECOND BYTE FIRST
         }

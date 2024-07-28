@@ -51,6 +51,12 @@ pub mod registers {
         PC:u16,
         memory: &'static mut memory::MemoryStruct
     }
+    enum FlagR{
+        Set,
+        Unset,
+        Keep, 
+        Function(&dyn Fn()->bool) //What should the argument here be?
+    }
     impl RegStruct{
         
         pub fn get_acc(&mut self) -> u8{
@@ -94,7 +100,7 @@ pub mod registers {
             }
         }
         pub fn flip_carry(&mut self){
-            self.F ^= 16
+            self.F ^= 16+32+64+128;
         }
         pub fn set_single_register(&mut self, reg:SingleReg, val:u8){
             match reg{ 
@@ -150,6 +156,40 @@ pub mod registers {
                 Flag::Carry => 16
             }
         }
+        pub fn process_flags(&mut self, flag_setting:[FlagR;4]){
+            match flag_setting[0]{
+                FlagR::Keep => (),
+                FlagR::Set => self.set_flag(Flag::Zero),
+                FlagR::Unset => self.unset_flag(Flag::Zero),
+                FlagR::Function(x) => self.flag_cond(Flag::Zero,x())
+            }
+            match flag_setting[1]{
+                FlagR::Keep => (),
+                FlagR::Set => self.set_flag(Flag::Neg),
+                FlagR::Unset => self.unset_flag(Flag::Neg),
+                FlagR::Function(x) => self.flag_cond(Flag::Neg,x())
+            }
+            match flag_setting[2]{
+                FlagR::Keep => (),
+                FlagR::Set => self.set_flag(Flag::Zero),
+                FlagR::Unset => self.unset_flag(Flag::Zero),
+                FlagR::Function(x) => self.flag_cond(Flag::HalfCarry,x())
+            }
+            match flag_setting[3]{
+                FlagR::Keep => (),
+                FlagR::Set => self.set_flag(Flag::Zero),
+                FlagR::Unset => self.unset_flag(Flag::Zero),
+                FlagR::Function(x) => self.flag_cond(Flag::Carry,x())
+            }
+        }
+        pub fn flag_cond(&mut self, flag: Flag,b:bool){
+            if b{
+                self.set_flag(flag);
+            }
+            else{
+                self.unset_flag(flag);
+            }
+        }
         pub fn set_flags(&mut self, zero:bool, neg:bool, hc:bool, carry:bool){
 
             self.F = (((((zero as u8) + ((neg as u8) << 1)) + hc as u8) << 1) + carry as u8)<< 4
@@ -195,11 +235,15 @@ pub mod registers {
         pub fn change_double_register(&mut self, reg:DoubleReg, fun: &dyn Fn(u16)->u16){
             self.set_double_register(reg,fun(self.get_double_register(reg)))
         }
-        pub fn apply_fun_to_acc(&mut self, reg:SingleReg,fun: &dyn Fn(u8,u8)->u8){
+        pub fn apply_fun_to_acc(&mut self, fun: &dyn Fn(u8)->u8){ //Changing this to a single valued anonymous function allows me to handle imms.
+            let acc:u8 = self.get_register(SingleReg::A);
+            self.set_single_register(SingleReg::A,fun(acc))
+        }
+        /**pub fn apply_fun_to_reg(&mut self, reg:SingleReg,fun: &dyn Fn(u8)->u8){
             let acc:u8 = self.get_register(SingleReg::A);
             let reg_val:u8 = self.get_register(reg);
             self.set_single_register(SingleReg::A,fun(acc,reg_val))
-        }
+        }**/
         pub fn r8_op_mid(&mut self, opcode:u8)->SingleReg{
             self.r8_op_end(opcode>>3)
         }
@@ -257,6 +301,9 @@ pub mod registers {
                 3 => self.get_flag(Flag::Carry),
                 _=>unreachable!()
             }
+        }
+        pub fn reset_flags(&mut self){
+            self.set_flags(false,false,false,false);
         }
         pub fn build_registers(mmy:&mut MemoryStruct)->Self{  //Sets the initial states of registers??? 
             return Self{

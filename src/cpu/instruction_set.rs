@@ -1,4 +1,4 @@
-use registers; //This was a waste of time tbh.
+/**use registers; //This was a waste of time tbh.
 mod instruction_set{
 
     //public struct instruction{ 
@@ -98,4 +98,4 @@ mod instruction_set{
             thread.sleep(4*CLOCK_PERIOD*cycles);
         }
     }
-}
+}*/
