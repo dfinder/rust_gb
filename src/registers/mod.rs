@@ -8,9 +8,9 @@ pub mod registers {
         let flag = (b as u8) << idx;
         x & mask | flag
     }
-    pub fn sign_8(x: u8)-> i8{
+    /**pub fn sign_8(x: u8)-> i8{
         ((!x)+1) as i8
-    }
+    }**/
     pub enum SingleReg{
         A,
         B,
@@ -51,11 +51,11 @@ pub mod registers {
         PC:u16,
         memory: &'static mut memory::MemoryStruct
     }
-    enum FlagR{
+    pub enum FlagR{
         Set,
         Unset,
         Keep, 
-        Function(&dyn Fn()->bool) //What should the argument here be?
+        Function(bool) //What should the argument here be?
     }
     impl RegStruct{
         
@@ -156,6 +156,26 @@ pub mod registers {
                 Flag::Carry => 16
             }
         }
+        pub fn set_flags_tri(&mut self,table:[i8;4]){
+            let mut flag:u8 = self.F;
+            for i in 0..3{
+                if table[i]==1{
+                    flag = set_bit(flag, (7-i as u8), true) 
+                }
+                if table[i]==-1{
+                    flag = set_bit(flag, 7-i as u8, false) 
+                }
+            }
+            self.F = flag;
+        }
+        //So to convert a bool, we take 0->-1, 1->1, giving us -1+(2*b)
+        //0->keep, -1->unset, 1->set 
+        // 0,X -> X
+        // 1,X -> 1
+        // -1,X -> 0
+
+            
+
         pub fn process_flags(&mut self, flag_setting:[FlagR;4]){
             match flag_setting[0]{
                 FlagR::Keep => (),
@@ -171,14 +191,14 @@ pub mod registers {
             }
             match flag_setting[2]{
                 FlagR::Keep => (),
-                FlagR::Set => self.set_flag(Flag::Zero),
-                FlagR::Unset => self.unset_flag(Flag::Zero),
+                FlagR::Set => self.set_flag(Flag::HalfCarry),
+                FlagR::Unset => self.unset_flag(Flag::HalfCarry),
                 FlagR::Function(x) => self.flag_cond(Flag::HalfCarry,x())
             }
             match flag_setting[3]{
                 FlagR::Keep => (),
-                FlagR::Set => self.set_flag(Flag::Zero),
-                FlagR::Unset => self.unset_flag(Flag::Zero),
+                FlagR::Set => self.set_flag(Flag::Carry),
+                FlagR::Unset => self.unset_flag(Flag::Carry),
                 FlagR::Function(x) => self.flag_cond(Flag::Carry,x())
             }
         }
