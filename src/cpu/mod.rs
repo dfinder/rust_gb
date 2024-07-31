@@ -26,7 +26,7 @@ pub mod cpu {
         current_command:u8,
         extra_waiting:bool,
         interrupt:InterruptState,
-        is_bc:bool,
+        is_cb:bool,
         //Preprocess Option<Operand>
         //used for mem reads to HL, failed conditional jumps
         //argument:Argument;
@@ -59,21 +59,6 @@ pub mod cpu {
                 wait_cond: Some(wait_cond),
             }
         }
-    }
-    enum Operand{
-        SingleReg(registers::SingleReg),
-        DoubleReg(registers::DoubleReg),
-        //PairSingleReg(registers::SingleReg,RegStruct:SingleReg)
-        MemReg(registers::DoubleReg),
-        StackReg(registers::DoubleReg),
-        Cond(bool),
-        Bits(u8),
-        BitsSingleReg(u8,registers::SingleReg),
-        PairSingleReg(registers::SingleReg,registers::SingleReg),
-        Imm8()
-        //Imm8(u8),
-        //Imm16(u16),
-        //PairDoubleImm(registers::DoubleReg,u16),
     }
     impl CpuStruct<'a>{
         fn new() -> Self{
@@ -163,7 +148,8 @@ pub mod cpu {
                     FunFind::fun_find_w(0xc0,0x90,CpuStruct::set,2,4)
                 ],
                 extra_waiting:false,
-                interrupt:InterruptState::Enabled
+                interrupt:InterruptState::Enabled,
+                is_cb: false
             }//Find a different way of doing this:
             //Break things apart according to our old pipeline model
         }
@@ -181,23 +167,17 @@ pub mod cpu {
         }
         fn get_r8_end(&mut self)->SingleReg{
             if self.is_imm(){
-
+                registers::SingleReg::A
             }
             self.reg_set.r8_op_end(self.current_command)
         }
-        fn get_6_bit_arg(&mut self,ff:FunFind)->Option<Operand>{
+        /*fn get_6_bit_arg(&mut self,ff:FunFind)->Option<Operand>{
             if ff.value == 0x40 && ff.wait==1{
                 return Some(Operand::PairSingleReg(self.reg_set.r8_op_mid(ff.value), self.reg_set.r8_op_end(ff.value)))
             }
             Some(Operand::BitsSingleReg((ff.value & 127) >> 4, self.reg_set.r8_op_end(ff.value)))
 
-        }
-        fn get_mid_3_bit_arg(&mut self,ff:FunFind)->Option<Operand>{
-            match ff.value {
-                0xc7 => Some(Operand::Bits((ff.value & 127) >> 4)),
-               _=> Some(Operand::SingleReg(self.reg_set.r8_op_mid(self.current_command)))
-            }
-        }
+        }*/
         fn get_imm8(&mut self)->u8{
             self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1))
         }
@@ -225,10 +205,8 @@ pub mod cpu {
 
             }
             for fun_entry in self.function_lookup{
-                if self.current_command & fun_entry.mask == fun_entry.value{
-                    let argument:Option<Operand> = Some(None);
-                    
-                    (fun_entry.function)(self,argument);
+                if (self.current_command & fun_entry.mask) == fun_entry.value{
+                    (fun_entry.function)(self);
                     if self.extra_waiting{
                         CpuStruct::wait(fun_entry.wait);
                     }else{
@@ -243,96 +221,106 @@ pub mod cpu {
                 panic!("we didn't do anything!")
             }
             //Manage interrupts
-
-            //self.reg_set.increment_pc()
-
         }
         fn cond(&mut self)->bool{
             self.reg_set.get_cond(self.current_command)
         }
-        fn alu_operand(&mut self)->SingleReg{
-            if self.current_command < 0xCB00{ 
-               SingleReg::A
+        fn alu_operand(&mut self)->u8{
+            if self.current_command >0x11000000 { 
+               self.get_imm8()
             }else{
                 self.extra_waiting = true;
-                self.get_r8_end()
+                self.reg_set.get_register(self.get_r8_end())
             }
         }
-        fn nop(&mut self, arg:Option<Operand>){
+        fn nop(&mut self){
             ()
         }
         // Rotates
-        fn rl(&mut self, arg:Option<Operand>){
+        fn rl(&mut self){
             let reg = self.alu_operand();
             let carry:bool = self.reg_set.get_flag(Flag::Carry);
             let top:bool = self.reg_set.get_bit(reg,7);
             self.reg_set.flag_cond(Flag::Carry,top);
             self.reg_set.change_single_register(reg, &|x| x<<1 + (carry as u8)); //Check to see if I need wrapping left shi
         }
-        fn rr(&mut self, arg:Option<Operand>){
+        fn rr(&mut self){
             let reg = self.alu_operand();
             let carry:bool = self.reg_set.get_flag(Flag::Carry);
             let bottom:bool = self.reg_set.get_bit(reg, 0);
             self.reg_set.flag_cond(Flag::Carry,bottom);
             self.reg_set.change_single_register(reg, &|x| (x>>1) + ((carry as u8)<<7));
         } 
-        fn rrc(&mut self, arg:Option<Operand>){
+        fn rrc(&mut self){
             let reg = self.alu_operand();
             self.reg_set.flag_cond(Flag::Carry,self.reg_set.get_bit(reg, 0)); 
             self.reg_set.change_single_register(reg, &|x| x.rotate_right(1));
         }
- 
-        fn rlc(&mut self, arg:Option<Operand>){
+        fn rlc(&mut self){
             let reg = self.alu_operand();
             self.reg_set.flag_cond(Flag::Carry,self.reg_set.get_bit(reg, 7)); //Rotate right
             self.reg_set.change_single_register(reg, &|x| x.rotate_left(1));
         }
-        fn daa(&mut self, arg:Option<Operand>){
+        fn daa(&mut self){
             let subtract = self.reg_set.get_flag(registers::Flag::Neg);
             let hcarry = self.reg_set.get_flag(registers::Flag::HalfCarry);
             let carry = self.reg_set.get_flag(registers::Flag::Carry);
-            
-            //To complete
+            let mut offset:u8= 0;
+            let a_val = self.reg_set.get_acc();
+            if (!subtract && a_val&0xf > 0x9) || hcarry{
+                offset |= 0x06
+            }
+            if (!subtract && a_val > 0x99) || carry{
+                offset |= 0x06
+            }
+            if subtract{
+                self.reg_set.apply_fun_to_acc(&|x|x.wrapping_sub(offset));
+            }else{
+                self.reg_set.apply_fun_to_acc(&|x|x.wrapping_add(offset));
+            }
+            self.reg_set.unset_flag(Flag::HalfCarry);
+            self.reg_set.flag_cond(Flag::Zero, self.reg_set.get_acc()==0);
+            self.reg_set.flag_cond(Flag::Zero, self.reg_set.get_acc()>0x99);
         }
         //Load Immediate
-        fn ldi_r16(&mut self, arg:Option<Operand>){ //0x01
+        fn ldi_r16(&mut self){ //0x01
             let reg_pair: DoubleReg = self.get_r16();
             let imm2:u16 = self.get_imm16();
             self.reg_set.set_double_register(reg_pair,imm2);
             //This may actually also be like... just run str r8 imm twice.
         }
-        fn ldi_r8(&mut self, arg:Option<Operand>){
+        fn ldi_r8(&mut self){
             let arg_reg: SingleReg = self.get_r8_mid();
             let imm:u8 = self.get_imm8();
             self.reg_set.set_single_register(arg_reg,imm);
         }
         //Stores
-        fn str_acc_rmem(&mut self, arg:Option<Operand>){//0x02
+        fn str_acc_rmem(&mut self){//0x02
             let arg_reg: DoubleReg = self.reg_set.r16_mem(self.current_command);
             self.memory_ref.set_memory_8(self.reg_set.get_double_register(arg_reg),self.reg_set.get_acc());
         }
-        fn str_c(&mut self, arg:Option<Operand>){ //Store A at address $FF00+C , e2
+        fn str_c(&mut self){ //Store A at address $FF00+C , e2
             let value:u16 = self.reg_set.get_register(SingleReg::C) as u16 + 0xFF00; 
             self.memory_ref.set_memory_8(value, self.reg_set.get_acc());
         } 
-        fn str_imm8(&mut self, arg:Option<Operand>){ //e0 
+        fn str_imm8(&mut self){ //e0 
             let reg:u8 = self.reg_set.get_acc();
             let imm:u16 = self.get_imm8() as u16;
             self.memory_ref.set_memory_8(imm+0xFF00, reg);
         }
-        fn str_imm16(&mut self, arg:Option<Operand>){ //EA
+        fn str_imm16(&mut self){ //EA
             let reg:u8 = self.reg_set.get_acc();
             let imm:u16 = self.get_imm16();
             self.memory_ref.set_memory_8(imm, reg);
         }
         //Loads 
-        fn ld_imm8(&mut self, arg:Option<Operand>){ //F0
+        fn ld_imm8(&mut self){ //F0
             let imm:u16 = (self.get_imm8() as u16)+0xFF00;
             let mem:u8 = self.memory_ref.grab_memory_8(imm);
             self.reg_set.set_acc(mem)
 
         } 
-        fn ld_imm16(&mut self, arg:Option<Operand>){
+        fn ld_imm16(&mut self){
             let imm:u16 = self.get_imm16();
             let mem:u8 = self.memory_ref.grab_memory_8(imm);
             self.reg_set.set_acc(mem)
@@ -342,215 +330,220 @@ pub mod cpu {
             let imm:u16 = self.get_imm16();
             self.reg_set.set_double_register(registers::DoubleReg::SP,imm);
         }
-        fn ld_r8_r8(&mut self, arg:Option<Operand>){
+        fn ld_r8_r8(&mut self){
             let reg_dest = self.get_r8_mid();
             let reg_src = self.get_r8_end();
             self.reg_set.set_single_register(reg_dest,self.reg_set.get_register(reg_src));
             self.extra_waiting = matches!(reg_src,SingleReg::Memptr) || !matches!(reg_dest,SingleReg::Memptr)
         }
-        fn ld_acc_addr(&mut self, arg:Option<Operand>){ //Load from address into accumulator. Kinda similar to LD 7 6 0101110110
+        fn ld_acc_addr(&mut self){ //Load from address into accumulator. Kinda similar to LD 7 6 0101110110
             let reg = self.get_r16();
             self.reg_set.set_acc(self.memory_ref.grab_memory_8(self.reg_set.get_double_register(reg)));
             if matches!(reg,DoubleReg::HLP) || matches!(reg,DoubleReg::HLM) {
                 self.reg_set.set_double_register(reg,0);
             }
         }
-        fn ld_c(&mut self, arg:Option<Operand>){ //A = mem($FF00 + c)
+        fn ld_c(&mut self){ //A = mem($FF00 + c)
             let addr:u16 = self.reg_set.get_register(SingleReg::C) as u16 + 0xFF00; 
             self.reg_set.set_acc(self.memory_ref.grab_memory_8(addr));
         } 
-        fn ld_hl_imm8(&mut self, arg:Option<Operand>){ //f8
+        fn ld_hl_imm8(&mut self){ //f8
             self.reg_set.set_double_register(DoubleReg::HL, self.reg_set.get_double_register(DoubleReg::SP)+(self.get_imm8() as u16))
         }
-        fn ld_sp_hl(&mut self, arg:Option<Operand>){ //f9
+        fn ld_sp_hl(&mut self){ //f9
             self.reg_set.set_double_register(DoubleReg::HL,self.reg_set.get_double_register(DoubleReg::SP));
         }
-        fn inc_r8(&mut self, arg:Option<Operand>){
+        fn inc_r8(&mut self){
             let reg:SingleReg = self.reg_set.r8_op_mid(self.current_command); //self.reg_set.r8_op_mid(self.current_command);
-            self.reg_set.change_single_register(reg, &|x| x+1);
-            self.extra_waiting = matches!(reg,SingleReg::Memptr)
+            let val:u8 = self.reg_set.get_register(reg);
+            self.reg_set.flag_cond(Flag::Zero, val==0xff);
+            self.reg_set.flag_cond(Flag::HalfCarry, val==0x0f);
+            self.reg_set.unset_flag(Flag::Neg);
+            self.reg_set.change_single_register(reg, &|x| x.wrapping_add(1));
+            
+            //self.extra_waiting = matches!(reg,SingleReg::Memptr)
         }
-        fn dec_r8(&mut self, arg:Option<Operand>){
+        fn dec_r8(&mut self){
             let reg:SingleReg = self.reg_set.r8_op_mid(self.current_command);
-            self.reg_set.change_single_register(reg, &|x| x-1);
-            self.extra_waiting = matches!(reg,SingleReg::Memptr)
+            self.reg_set.flag_cond(Flag::Zero, val==0x01);
+            self.reg_set.flag_cond(Flag::HalfCarry, val==0x10);
+            self.reg_set.set_flag(Flag::Neg);
+            self.reg_set.change_single_register(reg, &|x| x.wrapping_sub(1));
+            //self.extra_waiting = matches!(reg,SingleReg::Memptr)
         }
-        fn inc_r16(&mut self, arg:Option<Operand>){
+        fn inc_r16(&mut self){ //Doesn't affect flags
             let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
             self.reg_set.change_double_register(reg_pair,&|x| x+1);
         }
-        fn dec_r16(&mut self, arg:Option<Operand>){
+        fn dec_r16(&mut self){ //doesn't affect flags.
             let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
             self.reg_set.change_double_register(reg_pair,&|x| x-1);
         }
-        fn add_hl(&mut self, arg:Option<Operand>){
+        fn add_hl(&mut self){
             let reg_pair:DoubleReg = self.reg_set.r16_op(self.current_command);
-            let double_reg_val:u16 = self.reg_set.get_double_register(reg_pair);
-            self.reg_set.change_double_register(DoubleReg::HL, &|x|x+double_reg_val);
-            //TODO: Flags
+            let operand:u16 = self.reg_set.get_double_register(reg_pair);
+            let hl_val:u16 = self.reg_set.get_double_register(DoubleReg::HL);
+            self.reg_set.unset_flag(Flag::Neg);
+            self.reg_set.flag_cond(Flag::HalfCarry, (((hl_val&0x0FFF)+operand & 0x0fff)>0x1000));
+            self.reg_set.flag_cond(Flag::Carry, None == hl_val.checked_add(operand));
+            self.reg_set.flag_cond(Flag::Zero,x.wrapping_add(double_reg_val)==0);
+            self.reg_set.change_double_register(DoubleReg::HL, &|x|x.wrapping_add(double_reg_val));
         }
-        fn cpl(&mut self, arg:Option<Operand>){ //Invert A
+        fn cpl(&mut self){ //Invert A
             self.reg_set.change_single_register(SingleReg::A,&|x| !x);
             self.reg_set.set_flag(Flag::HalfCarry);
             self.reg_set.set_flag(Flag::Neg);
         }
-        fn ccf(&mut self, arg:Option<Operand>){
+        fn ccf(&mut self){
             self.reg_set.flip_carry();
         }
-        fn scf(&mut self, arg:Option<Operand>){
+        fn scf(&mut self){
             self.reg_set.set_flag(Flag::Carry);
         }
-        fn add(&mut self, arg:Option<Operand>){ 
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
-            self.reg_set.apply_fun_to_acc( &|x|x+operand)
+        fn add(&mut self){ 
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.flag_cond(Flag::Zero, acc.wrapping_add_unsigned(operand)==0);
+            self.reg_set.flag_cond(Flag::Carry, None == acc.checked_add(operand) );
+            self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F) + (operand & 0x0F)) > 0x10 );
+            self.reg_set.unset_flag(Flag::Neg);
+            self.reg_set.apply_fun_to_acc( &|x|x.wrapping_add_unsigned(operand));
         } 
-        fn adc(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
+        fn adc(&mut self){
             let carry = self.reg_set.get_flag(Flag::Carry);
-            self.reg_set.apply_fun_to_acc( &|x|x+(carry as u8)+operand)
+            let operand = self.alu_operand()+carry;
+            let acc = self.reg_set.get_acc();
+            self.reg_set.flag_cond(Flag::Zero, acc.wrapping_add_unsigned(operand)==0);
+            self.reg_set.flag_cond(Flag::Carry, None == acc.checked_add(operand) );
+            self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F) + (operand & 0x0F) as u8) > 0x10 );
+            self.reg_set.unset_flag(Flag::Neg);
+            self.reg_set.apply_fun_to_acc( &|x|x.wrapping_add_unsigned(operand))
         } 
-        fn sub(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
-            self.reg_set.apply_fun_to_acc( &|x|x-operand)
+        fn sub(&mut self){
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.flag_cond(Flag::Zero, acc==operand);
+            self.reg_set.set_flag(Flag::Neg);
+            self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F)<(operand & 0x0F)));
+            self.reg_set.flag_cond(Flag::Carry, operand>acc);
+            self.reg_set.apply_fun_to_acc( &|x|x.wrapping_sub(operand))
         }
-        fn subc(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }   
-            let carry = self.reg_set.get_flag(Flag::Carry);
-            self.reg_set.apply_fun_to_acc(&|x|x-(carry as u8)-operand);
+        fn subc(&mut self){
+            let carry:u8 = self.reg_set.get_flag(Flag::Carry) as u8;
+            let operand = self.alu_operand()+carry;
+            let acc = self.reg_set.get_acc();
+            self.reg_set.flag_cond(Flag::Zero, acc==operand);
+            self.reg_set.set_flag(Flag::Neg);
+            self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F)<((operand) & 0x0F)));
+            self.reg_set.flag_cond(Flag::Carry, operand>acc);
+            self.reg_set.apply_fun_to_acc(&|x|x.wrapping_sub(operand));
         } 
-        fn and(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
+        fn and(&mut self){
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.set_flags(operand&acc == 0 , false, true, false);
             self.reg_set.apply_fun_to_acc(&|x|x&operand);
         } 
-        fn xor(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
+        fn xor(&mut self){
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.set_flags(operand^acc == 0 , false, true, false);
             self.reg_set.apply_fun_to_acc( &|x|x^operand);
         } 
-        fn or(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }
+        fn or(&mut self){
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.set_flags(operand|acc == 0 , false, true, false);
             self.reg_set.apply_fun_to_acc( &|x| x|operand); //what if I were to go even cooler
         }
-        fn cp(&mut self, arg:Option<Operand>){
-            let mut operand:u8;
-            if (self.current_command & 0xC0) == 0xC0{
-                operand = self.get_imm8();
-            }else{
-                operand = self.reg_set.get_register(self.get_r8_end());
-            }                 
-            let acc = self.reg_set.get_register(SingleReg::A);
-            self.reg_set.set_flags((operand-acc == 0),true,true,(operand>acc)) //TODO: figure our half carry flag.
-            //self.reg_set.apply_fun_to_acc(arg_reg, &|x|x&self.reg_set.get_register(process_single_arg(Operand)))
+        fn cp(&mut self){
+            let operand = self.alu_operand();
+            let acc = self.reg_set.get_acc();
+            self.reg_set.flag_cond(Flag::Zero, acc==operand);
+            self.reg_set.set_flag(Flag::Neg);
+            self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F)<(operand & 0x0F)));
+            self.reg_set.flag_cond(Flag::Carry, operand>acc);
         } 
 
-        fn ret(&mut self, arg:Option<Operand>){   
+        fn ret(&mut self){   
             let instruction = self.memory_ref.grab_memory_16(self.reg_set.get_double_register(DoubleReg::SP));
             self.reg_set.set_double_register(DoubleReg::PC, instruction);
             self.reg_set.change_double_register(DoubleReg::SP, &|x|x+2)
         }
-        fn ret_cond(&mut self, arg:Option<Operand>){
+        fn ret_cond(&mut self){
             if self.cond(){
-                self.ret(arg);
+                self.ret();
                 self.extra_waiting=true;
             }
         } 
-        fn reti(&mut self, arg:Option<Operand>){
-            self.ret(arg);
-            self.ei(arg);
+        fn reti(&mut self){
+            self.ret();
+            self.ei();
         } 
         //Jumps
-        fn jr_imm(&mut self, arg:Option<Operand>){ //Jump Relative
+        fn jr_imm(&mut self){ //Jump Relative
            self.reg_set.set_pc((self.get_imm8() as u16)+self.reg_set.get_double_register(registers::DoubleReg::PC));
         }
-        fn jr_cond(&mut self, arg:Option<Operand>){
+        fn jr_cond(&mut self){
             if self.cond(){
-                self.jr_imm(arg);
+                self.jr_imm();
                 self.extra_waiting=true;
             } 
         }
-        fn jp_cond_imm(&mut self, arg:Option<Operand>){
+        fn jp_cond_imm(&mut self){
             if self.cond(){
-                self.jp_imm(arg);
+                self.jp_imm();
                 self.extra_waiting=true;
             } 
         }  
         //Jump to 
-        fn jp_imm(&mut self, arg:Option<Operand>){
+        fn jp_imm(&mut self){
             self.reg_set.set_pc(self.get_imm16());
         } 
-        fn jp_hl(&mut self, arg:Option<Operand>){
+        fn jp_hl(&mut self){
             self.reg_set.set_double_register(registers::DoubleReg::PC, self.reg_set.get_double_register(registers::DoubleReg::HL))
         } 
-        fn call_cond(&mut self, arg:Option<Operand>){
+        fn call_cond(&mut self){
             if self.cond(){
-                self.call_imm(arg);
+                self.call_imm();
                 self.extra_waiting=true;
             } 
         } 
-        fn call_imm(&mut self, arg:Option<Operand>){
+        fn call_imm(&mut self){
             let addr = self.get_imm16();
             self.memory_ref.set_memory_16(self.reg_set.get_double_register(DoubleReg::SP), self.reg_set.get_double_register(DoubleReg::PC));
             self.reg_set.change_double_register(DoubleReg::SP, &|x|x-2);
             self.reg_set.set_pc(addr);
         } 
-        fn rst(&mut self, arg:Option<Operand>){
+        fn rst(&mut self){
             let value: u16 = self.reg_set.get_double_register(DoubleReg::PC);
             self.memory_ref.set_memory_16(self.reg_set.get_double_register(DoubleReg::SP), value);
             self.reg_set.change_double_register(DoubleReg::SP, &|x|x-2);
             self.reg_set.set_pc((self.current_command & 0x00111000) as u16);
         }
-        fn pop(&mut self, arg:Option<Operand>){
+        fn pop(&mut self){
             let operand = self.reg_set.r16_stk(self.current_command);
             let instruction = self.memory_ref.grab_memory_16(self.reg_set.get_double_register(DoubleReg::SP));
             self.reg_set.set_double_register(operand, instruction);
             self.reg_set.change_double_register(DoubleReg::SP, &|x|x+2)
         }
-        fn push(&mut self, arg:Option<Operand>){
+        fn push(&mut self){
             let operand = self.reg_set.r16_stk(self.current_command);
             let value: u16 = self.reg_set.get_double_register(operand);
             self.memory_ref.set_memory_16(self.reg_set.get_double_register(DoubleReg::SP), value);
             self.reg_set.change_double_register(DoubleReg::SP, &|x|x-2)
         }
-        fn add_sp_imm8(&mut self, arg:Option<Operand>){
+        fn add_sp_imm8(&mut self){
             let operand:i8 = self.get_imm8() as i8;
+            //self.reg_set.flag_cond(Flag::Carry, None == acc.checked_add(operand) );
+            //self.reg_set.flag_cond(Flag::HalfCarry, ((acc & 0x0F) + (operand & 0x0F)) > 0x10 );
+            self.reg_set.unset_flag(Flag::Neg);
+            self.reg_set.unset_flag(Flag::Zero);
+
             self.reg_set.change_double_register(registers::DoubleReg::SP, &|x| x.wrapping_add_signed(operand as i16));
         }
 
-        fn di(&mut self, arg:Option<Operand>){
+        fn di(&mut self){
             self.interrupt =match self.interrupt{
                 InterruptState::AlmostDisabled|InterruptState::Disabled => InterruptState::Disabled,
                 InterruptState::AlmostEnabled|InterruptState::Enabled => InterruptState::AlmostDisabled,
@@ -558,7 +551,7 @@ pub mod cpu {
                 InterruptState::DisableInterrupt => unreachable!(),
             }
         }
-        fn ei(&mut self, arg:Option<Operand>){
+        fn ei(&mut self){
             self.interrupt =match self.interrupt{
                 InterruptState::AlmostDisabled|InterruptState::Disabled => InterruptState::AlmostEnabled,
                 InterruptState::AlmostEnabled|InterruptState::Enabled => InterruptState::Enabled,
@@ -567,7 +560,7 @@ pub mod cpu {
             }
         } 
 
-        fn sla(&mut self, arg:Option<Operand>){
+        fn sla(&mut self){
             let reg = self.get_r8_end();
             let operand = self.reg_set.get_register(reg);                
             self.reg_set.reset_flags();
@@ -575,7 +568,7 @@ pub mod cpu {
             self.reg_set.flag_cond(Flag::Zero, operand == 128 || operand==0);
             self.reg_set.change_single_register(reg, &|x|x<<1);
         } 
-        fn sra(&mut self, arg:Option<Operand>){
+        fn sra(&mut self){
             let reg = self.get_r8_end();
             let operand = self.reg_set.get_register(reg);
             self.reg_set.reset_flags();
@@ -583,7 +576,7 @@ pub mod cpu {
             self.reg_set.flag_cond(Flag::Carry,operand%2 == 1 );
             self.reg_set.change_single_register(reg, &|x|(x>>1)+(128 * ((x>127) as u8))); //Sneaky little arithmetic right shift.
         } 
-        fn srl(&mut self, arg:Option<Operand>){
+        fn srl(&mut self){
             let reg = self.get_r8_end();
             let operand = self.reg_set.get_register(reg);
             self.reg_set.reset_flags();
@@ -591,7 +584,7 @@ pub mod cpu {
             self.reg_set.flag_cond(Flag::Carry,operand%2 == 1 );
             self.reg_set.change_single_register(reg, &|x|(x>>1)); 
         } 
-        fn swap(&mut self, arg:Option<Operand>){
+        fn swap(&mut self){
             let reg = self.get_r8_end();
             let operand = self.reg_set.get_register(reg);
             self.reg_set.reset_flags();
@@ -599,37 +592,37 @@ pub mod cpu {
             self.reg_set.change_single_register(reg, &|x:u8|x.rotate_left(4)); 
         } 
 
-        fn bit(&mut self, arg:Option<Operand>){
+        fn bit(&mut self){
             let bits : u8 = ((self.current_command & 63) >> 3);
             let reg : SingleReg = self.get_r8_end();
             let val : u8 = self.reg_set.get_register(reg); 
             self.reg_set.set_flags_tri([btt((val>>bits) % 2 == 1),-1,1,0]);
         }
-        fn res(&mut self, arg:Option<Operand>){
+        fn res(&mut self){
             let bits : u8 = (self.current_command & 63) >> 3;
             let reg : SingleReg = self.get_r8_end();
             self.reg_set.change_single_register(reg, &|x| !(x & (1<<bits))); 
         } 
-        fn set(&mut self, arg:Option<Operand>){
+        fn set(&mut self){
             let bits : u8 = (self.current_command & 63) >> 3;
             let reg : SingleReg = self.get_r8_end();          
             self.reg_set.change_single_register(reg, &|x| x | 1<<bits );
         }
-        fn stop(&mut self, arg:Option<Operand>){
+        fn stop(&mut self){
             loop {
                 CpuStruct::wait(1);
                 //PAUSE THE GPU
                 //BREAK IF BUTTON PRESSED.
             }
         }
-        fn halt(&mut self, arg:Option<Operand>){
+        fn halt(&mut self){
             loop { 
                 CpuStruct::wait( 1) //Enter low power mode until an interrupt
             }
         }
-        fn cb_block(&mut self, arg:Option<Operand> ){
-            let local_command = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1));
-            self.current_command = 0xcb00+ (local_command as u16);
+        fn cb_block(&mut self){
+            self.current_command = self.memory_ref.grab_memory_8(self.reg_set.increment_pc(1));
+            self.is_cb = true;
             let mut taken = false;
             for x in self.cb_block_lookup{
                 if local_command & x.mask == x.value{

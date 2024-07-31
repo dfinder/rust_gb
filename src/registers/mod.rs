@@ -249,8 +249,9 @@ pub mod registers {
                 7 => SingleReg::A 
             }
         }
-        pub fn change_single_register(&mut self, reg:SingleReg,fun: &dyn Fn(u8)->u8){
-            self.set_single_register(reg,fun(self.get_register(reg)))
+        pub fn change_single_register(&mut self, reg:SingleReg,fun: &dyn Fn(u8)->u8)->u8{
+            self.set_single_register(reg,fun(self.get_register(reg)));
+            fun(self.get_register(reg))
         }
         pub fn change_double_register(&mut self, reg:DoubleReg, fun: &dyn Fn(u16)->u16){
             self.set_double_register(reg,fun(self.get_double_register(reg)))
