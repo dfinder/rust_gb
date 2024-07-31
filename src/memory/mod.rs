@@ -5,11 +5,11 @@ pub mod memory{
     
     use crate::cpu::cpu::CpuStruct;
     pub struct MemoryStruct{
-        my_memory:[u8;65535]
+        my_memory:[u8;65536]
     }
     impl MemoryStruct{
-        pub fn init_memory()->Self{
-            let mut my_memory=[0 as u8;65535];
+        pub fn new()->Self{
+            let mut my_memory=[0 as u8;65536];
             let filename = "./DMG_ROM.bin";
             let mut f = File::open(&filename).expect("no file found"); //Len = 256
             f.read(&mut my_memory).expect("buffer overflow");
@@ -24,6 +24,7 @@ pub mod memory{
         pub fn grab_memory_16(&mut self,addr:u16)->u16{
             CpuStruct::wait(4);
             (self.my_memory[(addr+1) as usize] as u16) <<8 + (self.my_memory[addr as usize] as u16)
+            
             //#REMEMBER THIS IS IN LITTLE ENDIAN ORDER! THE BULLSHIT ONE! WE PUT THE SECOND BYTE FIRST
         }
         pub fn set_memory_8(&mut self, addr:u16, value:u8){

@@ -1,4 +1,6 @@
 pub mod screen;
+mod cpu_state;
+mod memory_wrapper;
 use winit::*;
 use glium::*;
 use crate::screen::screen::display_screen;
@@ -8,7 +10,7 @@ pub mod registers;
 pub mod memory;
 extern crate glium;
 fn main() {
-    
+    let my_cpu = cpu::cpu::CpuStruct::new();
 
     // Set up window/connectivity with OS
     // Read startup data
