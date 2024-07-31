@@ -81,7 +81,7 @@ fn main() {
             FunFind::fun_find(0xff,0xfb,CpuStruct::ei,1)
         ];
 
-        let cb_block_lookup=[
+        let cb_block_lookup: [FunFind; 11]=[
             FunFind::fun_find_w(0xf8,0x00,CpuStruct::rlc,2,4),
             FunFind::fun_find_w(0xf8,0x08,CpuStruct::rrc,2,4),
             FunFind::fun_find_w(0xf8,0x10,CpuStruct::rl,2,4),
@@ -96,7 +96,7 @@ fn main() {
         ];
     let mut my_cpu = cpu::cpu::CpuStruct::new();
     loop{
-        my_cpu.interpret_command(&function_lookup, &cb_block_lookup);
+        my_cpu.interpret_command();
     }
 
     // Set up window/connectivity with OS
