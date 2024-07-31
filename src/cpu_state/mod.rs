@@ -83,13 +83,11 @@ pub mod cpu_state{
             self.registers.set_r16(reg,val, &mut self.memory);
             val
         }        
-        pub fn get_r16_mem_direct(&mut self,opcode: u8)->u8{
+        /*pub fn get_r16_mem_direct(&mut self,opcode: u8)->u8{
             let reg:DoubleReg = self.r16_mem_tbl(opcode);
             let addr:u16 = self.get_r16_val(reg);
             self.memory.grab_memory_8(addr)
-
-
-        }
+        }*/
         pub fn get_r8_val(&mut self,reg:SingleReg)->u8{
             self.registers.get_r8(reg, &mut self.memory)
         }
@@ -103,8 +101,8 @@ pub mod cpu_state{
         pub fn set_r16_val(&mut self, reg:DoubleReg, val:u16){
             self.registers.set_r16(reg, val, &mut self.memory)
         }
-        pub fn set_r16_memory(&mut self,reg:DoubleReg, val:u8){
-            self.memory.set_memory_8(self.registers.get_r16(reg), val)
+        pub fn set_r16_memory(&mut self,reg:DoubleReg, val:u16){
+            self.memory.set_memory_16(self.registers.get_r16(reg), val)
         }
         pub fn get_r16_memory(&mut self,reg:DoubleReg)->u8{
             self.memory.grab_memory_8(self.registers.get_r16(reg))
@@ -112,10 +110,10 @@ pub mod cpu_state{
         pub fn get_r16_memory_word(&mut self, reg:DoubleReg)->u16{
             self.memory.grab_memory_16(self.registers.get_r16(reg))
         }
-        pub fn get_reg_val(&mut self,opcode:u8)->u8 {
+        /*pub fn get_reg_val(&mut self,opcode:u8)->u8 {
             let reg = self.get_r8_end(opcode);
             self.get_r8_val(reg)
-        }
+        }*/
         pub fn get_flag(&mut self, flag: Flag) -> bool {
             let flag_reg = self.registers.get_r8(SingleReg::F, &mut self.memory);
             match flag{
@@ -140,9 +138,8 @@ pub mod cpu_state{
             self.set_flag(Flag::HalfCarry, hc);
             self.set_flag(Flag::Carry, carry);
         }
-        pub fn apply_fun_to_acc(&mut self, fun: &dyn Fn(u8)->u8){
-            let acc:u8 = self.registers.get_r8(SingleReg::A, &mut self.memory);
-            self.registers.set_r8(SingleReg::A,fun(acc), &mut self.memory)
+        pub fn apply_fun_to_acc(&mut self, fun: &dyn Fn(u8)->u8)->u8{
+            self.registers.change_r8(SingleReg::A,fun, &mut self.memory)
         }
         pub fn set_byte(&mut self,addr:u16,val:u8){
             self.memory.set_memory_8(addr, val)

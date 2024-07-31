@@ -121,15 +121,20 @@ pub mod registers {
                     self.H = (val >> 8) as u8;
                     self.L = val as u8;
                 },
-                DoubleReg::HLP => { //This doesn't work
-                    let new_val = glue(self.H,self.L)+1;
-                    self.H = (val >> 8) as u8;
-                    self.L = val as u8;
+                DoubleReg::HLP => { 
+
+                    let mut addr = glue(self.H,self.L);
+                    memory.set_memory_16(addr, val);
+                    addr+=1;
+                    self.H = (addr >> 8) as u8;
+                    self.L = addr as u8;
                 },
-                DoubleReg::HLM => { //This doesn't work. This needs to write to memory.
-                    let new_val = glue(self.H,self.L)-1;
-                    self.H = (val >> 8) as u8;
-                    self.L = val as u8;
+                DoubleReg::HLM => {
+                    let mut addr = glue(self.H,self.L);
+                    memory.set_memory_16(addr, val);
+                    addr-=1;
+                    self.H = (addr >> 8) as u8;
+                    self.L = addr as u8;
                 }
                 DoubleReg::SP => self.SP=val,
                 DoubleReg::PC => self.PC=val,
