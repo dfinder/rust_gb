@@ -150,26 +150,30 @@ pub mod cpu {
                 _ => ()
 
             }
-            for fun_entry in self.function_lookup{
+            let mut fun_pointer: fn(&mut CpuStruct) = CpuStruct::nop;
+            let mut waiting = 0;
+            let mut cond_waiting = 0;
+            for fun_entry in &self.function_lookup{
                 if (self.current_command & fun_entry.mask) == fun_entry.value{
-                   /*  if fun_entry.value == 0xCB{
-                        self.cb_block(cb_lookup);
-                    }*/
-                    (fun_entry.function)(self);
-                    
-                    if self.extra_waiting{
-                        CpuStruct::wait(fun_entry.wait);
-                    }else{
-                        CpuStruct::wait(fun_entry.wait_cond.unwrap());
-                    }; //Evaluate for sanity
-
-                    taken=true;
-                    break;
+                        fun_pointer=fun_entry.function;
+                        waiting=fun_entry.wait;
+                        if fun_entry.wait_cond.is_some(){
+                            cond_waiting=fun_entry.wait_cond.unwrap();
+                        }
+                        taken = true;
                 }
             }
+
             if !taken{
                 panic!("we didn't do anything!")
             }
+            fun_pointer(self);
+            if self.extra_waiting{
+                CpuStruct::wait(waiting);
+            }else{
+                CpuStruct::wait(cond_waiting);
+            }; //Evaluate for sanity
+
             //self.interpret_command(function_lookup, cb_lookup)
             //Manage interrupts
         }
