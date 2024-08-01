@@ -12,7 +12,7 @@ pub mod cpu {
     pub type CPUFunct =  fn(&mut CpuStruct);
     enum InterruptState{
         Enabled, //Despite naming, it's really that we have E, DI, AD as "enmabled" states
-        DisableInterrupt,
+        DisableInterrupt, 
         AlmostDisabled,
         EnableInterrupt, 
         AlmostEnabled,
@@ -91,7 +91,7 @@ pub mod cpu {
                     FunFind::fun_find(0xe7,0xc7,CpuStruct::rst,4),
                     FunFind::fun_find(0xcf,0xc1,CpuStruct::pop,3),
                     FunFind::fun_find(0xcf,0xc5,CpuStruct::push,4),
-                    FunFind::fun_find(0xff,0xcb,CpuStruct::nop,1),
+                    FunFind::fun_find(0xff,0xcb,CpuStruct::cb_block,1),
                     FunFind::fun_find(0xff,0xe2,CpuStruct::str_c,1), //We're storing if we're mapping to memory, we're loadingif we'r 
                     FunFind::fun_find(0xff,0xe0,CpuStruct::str_imm8,2),
                     FunFind::fun_find(0xff,0xea,CpuStruct::str_imm16,3),
@@ -414,7 +414,7 @@ pub mod cpu {
             let acc = self.cpu_state.get_acc();
             self.cpu_state.set_flag(Flag::Zero, acc==operand);
             self.cpu_state.set_flag(Flag::Neg,true);
-            self.cpu_state.set_flag(Flag::HalfCarry, ((acc & 0x0F)<((operand) & 0x0F)));
+            self.cpu_state.set_flag(Flag::HalfCarry, (acc & 0x0F)<((operand) & 0x0F));
             self.cpu_state.set_flag(Flag::Carry, operand>acc);
             self.cpu_state.apply_fun_to_acc(&|x|x.wrapping_sub(operand));
         } 
@@ -441,7 +441,7 @@ pub mod cpu {
             let acc = self.cpu_state.get_acc();
             self.cpu_state.set_flag(Flag::Zero, acc==operand);
             self.cpu_state.set_flag(Flag::Neg,true);
-            self.cpu_state.set_flag(Flag::HalfCarry, ((acc & 0x0F)<(operand & 0x0F)));
+            self.cpu_state.set_flag(Flag::HalfCarry, (acc & 0x0F)<(operand & 0x0F));
             self.cpu_state.set_flag(Flag::Carry, operand>acc);
         } 
 
@@ -607,19 +607,36 @@ pub mod cpu {
                 CpuStruct::wait( 1) //Enter low power mode until an interrupt
             }
         }
-        pub fn cb_block(&mut self,cb_table:&[FunFind;11]){
+        
+        pub fn cb_block(&mut self){
 
             let pc = self.cpu_state.inc_pc();
             self.current_command = self.cpu_state.get_byte(pc);
             self.is_cb = true;
+            let mut fun_pointer: fn(&mut CpuStruct)=CpuStruct::nop;
+            let mut waiting= 0;
+            let mut cond_waiting = 0;
             let mut taken = false;
-            let current_command = self.current_command;
-            for x in cb_table{
-                if current_command & x.mask == x.value{
-                    (x.function)(self); //Evaluate for sanity
-                    taken=true;
+            for fun_entry in &self.cb_block_lookup{
+                if (self.current_command & fun_entry.mask) == fun_entry.value{
+                        fun_pointer=fun_entry.function;
+                        waiting=fun_entry.wait;
+                        if fun_entry.wait_cond.is_some(){
+                            cond_waiting=fun_entry.wait_cond.unwrap();
+                        }
+                        taken = true;
                 }
             }
+
+            if !taken{
+                panic!("we didn't do anything!")
+            }
+            fun_pointer(self);
+            if self.extra_waiting{
+                CpuStruct::wait(waiting);
+            }else{
+                CpuStruct::wait(cond_waiting);
+            }; //Evaluate for sanity
             if !taken{
                 panic!("we didn't do anything!")
             }

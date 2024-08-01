@@ -1,6 +1,5 @@
 
 pub mod function_table{
-    use crate::cpu::cpu::CpuStruct;
     use crate::cpu::cpu::CPUFunct;
     //#[derive(Copy)]
     pub struct FunFind{
