@@ -1,5 +1,5 @@
-mod joypad{
-    struct mapping{
+pub mod joypad{
+    struct Mapping{
         
     }
 }
