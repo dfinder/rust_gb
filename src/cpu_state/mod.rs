@@ -181,5 +181,8 @@ pub mod cpu_state{
             self.memory.set_memory_16(addr, value)
 
         }
+        pub fn get_graphics(&mut self) -> &[u8;8192]{
+            self.memory.get_graphics()
+        }
     }
 }

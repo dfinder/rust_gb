@@ -20,13 +20,12 @@ pub mod cpu {
     }
 
     pub struct CpuStruct{
-        cpu_state: CpuState,
+        pub cpu_state: CpuState,
         function_lookup:[FunFind;63],
         cb_block_lookup:[FunFind;11],
         current_command:u8,
         extra_waiting:bool,
         interrupt:InterruptState,
-        is_cb:bool,
         //Preprocess Option<Operand>
         //used for mem reads to HL, failed conditional jumps
         //argument:Argument;
@@ -40,7 +39,7 @@ pub mod cpu {
                 current_command:0x00, //initalize to a noop
                 function_lookup:[
                     //Block 1,
-                    FunFind::fun_find(0xff,0x00,CpuStruct::nop,1), //done
+                    FunFind::fun_find(0xff,0x00,CpuStruct::nop,1), //done //Reasses waits.
                     FunFind::fun_find(0xcf,0x01,CpuStruct::ldi_r16,3),  //done
                     FunFind::fun_find(0xcf,0x02,CpuStruct::str_acc_rmem,2),
                     FunFind::fun_find(0xcf,0x03,CpuStruct::inc_r16,2),//done
@@ -120,23 +119,15 @@ pub mod cpu {
                 ],
                 extra_waiting:false,
                 interrupt:InterruptState::Enabled,
-                is_cb: false
             }//Find a different way of doing this:
             //Break things apart according to our old pipeline model
         }
-        /*fn get_6_bit_arg(&mut self,ff:FunFind)->Option<Operand>{
-            if ff.value == 0x40 && ff.wait==1{
-                return Some(Operand::PairSingleReg(self.cpu_state.r8_op_mid(ff.value), self.cpu_state.r8_op_end(ff.value)))
-            }
-            Some(Operand::BitsSingleReg((ff.value & 127) >> 4, self.cpu_state.r8_op_end(ff.value)))
-
-        }*/
+        pub fn fetch_graphics(&mut self)->&[u8;8192]{
+            self.cpu_state.get_graphics()
+        }
         pub fn interpret_command(&mut self){ //function_lookup:&[FunFind;63], cb_lookup:&[FunFind;11]
-            //my_pc = self.register_set.PC;
             let current_pc = self.cpu_state.inc_pc();
             self.current_command = self.cpu_state.get_byte(current_pc);
-            //let first_two:u8 = current_command >> 6
-            //static masks:[u8]=[0xFF,0xCF,0xE7,0xC0,0xC7,0xF8]
             let mut taken:bool = false;
             self.extra_waiting = false;
             self.interrupt = match self.interrupt{
@@ -148,7 +139,6 @@ pub mod cpu {
             match self.interrupt{
                 InterruptState::Enabled|InterruptState::DisableInterrupt|InterruptState::AlmostDisabled => todo!(),
                 _ => ()
-
             }
             let mut fun_pointer: fn(&mut CpuStruct) = CpuStruct::nop;
             let mut waiting = 0;
@@ -163,7 +153,6 @@ pub mod cpu {
                         taken = true;
                 }
             }
-
             if !taken{
                 panic!("we didn't do anything!")
             }
@@ -181,7 +170,7 @@ pub mod cpu {
             self.cpu_state.get_cond(self.current_command)
         }
         pub fn alu_register(&mut self)->SingleReg{
-            if self.current_command >0b11000000 { 
+            if self.current_command > 0b11000000 { 
                 SingleReg::A
              }else{
                  self.cpu_state.get_r8_end(self.current_command)
@@ -199,11 +188,11 @@ pub mod cpu {
         pub fn nop(&mut self){
             ()
         }
-        // Rotates
+        // Rotations
         pub fn rl(&mut self){
             let val = self.alu_operand();
-            let carry:bool = self.cpu_state.get_flag(Flag::Carry);
             let reg = self.alu_register();
+            let carry:bool = self.cpu_state.get_flag(Flag::Carry);
             self.cpu_state.change_r8(reg, &|x| x<<1 + (carry as u8)); //Check to see if I need wrapping left shi
             self.cpu_state.set_flag(Flag::Carry,val>127);
         }
@@ -216,14 +205,12 @@ pub mod cpu {
         pub fn rr(&mut self){
             let reg = self.alu_register();
             let val = self.alu_operand();
-            //reg=self.
             let carry:bool = self.cpu_state.get_flag(Flag::Carry);
             let bottom:bool = (val % 2)==1;
             self.cpu_state.set_flag(Flag::Carry,bottom);
             self.cpu_state.change_r8(reg, &|x| (x>>1) + ((carry as u8)<<7));
         } 
         pub fn rrc(&mut self){
-
             let value = self.alu_operand();
             let reg = self.alu_register();
             self.cpu_state.set_flag(Flag::Carry,(value % 2)==1); 
@@ -237,10 +224,10 @@ pub mod cpu {
             let mut offset:u8= 0;
             let a_val = self.cpu_state.get_acc();
             if (!subtract && a_val&0xf > 0x9) || hcarry{
-                offset |= 0x06
+                offset |= 0x06;
             }
             if (!subtract && a_val > 0x99) || carry{
-                offset |= 0x06
+                offset |= 0x60;
             }
             //let fun = &|x|x+offset;
             if subtract{
@@ -251,7 +238,7 @@ pub mod cpu {
             self.cpu_state.set_flag(Flag::HalfCarry,false);
             let acc = self.cpu_state.get_acc();
             self.cpu_state.set_flag(Flag::Zero, acc==0);
-            self.cpu_state.set_flag(Flag::Zero, acc>0x99);
+            self.cpu_state.set_flag(Flag::Carry, acc>0x99);
         }
         //Load Immediate
         pub fn ldi_r16(&mut self){ //0x01
@@ -363,16 +350,16 @@ pub mod cpu {
             let reg_pair:DoubleReg = self.cpu_state.r16_tbl(self.current_command);
             let operand:u16 = self.cpu_state.get_r16_val(reg_pair);
             let hl_val:u16 = self.cpu_state.get_r16_val(DoubleReg::HL);
+            let result = self.cpu_state.change_r16(DoubleReg::HL, &|x|x.wrapping_add(operand));
             self.cpu_state.set_flag(Flag::Neg,false);
-            self.cpu_state.set_flag(Flag::HalfCarry, ((hl_val&0x0FFF)+operand & 0x0fff)>0x1000);
+            self.cpu_state.set_flag(Flag::HalfCarry, (hl_val&0x0fff)+(operand & 0x0fff)>0x1000);
             self.cpu_state.set_flag(Flag::Carry, None == hl_val.checked_add(operand));
-            self.cpu_state.set_flag(Flag::Zero,hl_val.wrapping_add(operand)==0);
-            self.cpu_state.change_r16(DoubleReg::HL, &|x|x.wrapping_add(operand));
+            self.cpu_state.set_flag(Flag::Zero,result==0);
         }
         pub fn cpl(&mut self){ //Invert A
-            self.cpu_state.change_r8(SingleReg::A,&|x| !x);
             self.cpu_state.set_flag(Flag::HalfCarry,true);
             self.cpu_state.set_flag(Flag::Neg,true);
+            self.cpu_state.change_r8(SingleReg::A,&|x| !x);
         }
         pub fn ccf(&mut self){
             self.cpu_state.flip_carry();
@@ -410,8 +397,8 @@ pub mod cpu {
         }
         pub fn subc(&mut self){
             let carry:u8 = self.cpu_state.get_flag(Flag::Carry) as u8;
-            let operand = self.alu_operand()+carry;
-            let acc = self.cpu_state.get_acc();
+            let operand: u8 = self.alu_operand()+carry;
+            let acc: u8 = self.cpu_state.get_acc();
             self.cpu_state.set_flag(Flag::Zero, acc==operand);
             self.cpu_state.set_flag(Flag::Neg,true);
             self.cpu_state.set_flag(Flag::HalfCarry, (acc & 0x0F)<((operand) & 0x0F));
@@ -462,9 +449,9 @@ pub mod cpu {
         } 
         //Jumps
         pub fn jr_imm(&mut self){ //Jump Relative
-            let imm = self.cpu_state.get_imm8() as u16;
+            let imm = self.cpu_state.get_imm8() as i16;
             let pc = self.cpu_state.get_r16_val(registers::DoubleReg::PC);
-            self.cpu_state.set_pc(pc+imm);
+            self.cpu_state.set_pc(pc.wrapping_add_signed(imm));
         }
         pub fn jr_cond(&mut self){
             if self.cond(){
@@ -478,13 +465,13 @@ pub mod cpu {
                 self.extra_waiting=true;
             } 
         }  
-        //Jump to 
+        //Jump 
         pub fn jp_imm(&mut self){
-            let imm = self.cpu_state.get_imm16();
+            let imm: u16 = self.cpu_state.get_imm16();
             self.cpu_state.set_r16_val(registers::DoubleReg::PC, imm);
         } 
         pub fn jp_hl(&mut self){
-            let hl =  self.cpu_state.get_r16_val(registers::DoubleReg::HL);
+            let hl: u16 =  self.cpu_state.get_r16_val(registers::DoubleReg::HL);
             self.cpu_state.set_r16_val(registers::DoubleReg::PC,hl)
         } 
         pub fn call_cond(&mut self){
@@ -495,11 +482,8 @@ pub mod cpu {
         } 
         pub fn call_imm(&mut self){
             let addr = self.cpu_state.get_imm16();
-            //let stack_pointer = self.cpu_state.get_r16_val(DoubleReg::SP);
             let pc = self.cpu_state.get_r16_val(DoubleReg::PC);
             self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
-           // self.cpu_state.set_half_word(stack_pointer,pc);
-            //self.cpu_state.set_r16_memory_direct();
             self.cpu_state.change_r16(DoubleReg::SP, &|x|x-2);
             self.cpu_state.set_pc(addr);
         } 
@@ -537,20 +521,19 @@ pub mod cpu {
         pub fn di(&mut self){
             self.interrupt =match self.interrupt{
                 InterruptState::AlmostDisabled|InterruptState::Disabled => InterruptState::Disabled,
-                InterruptState::AlmostEnabled|InterruptState::Enabled => InterruptState::AlmostDisabled,
+                InterruptState::AlmostEnabled|InterruptState::Enabled => InterruptState::DisableInterrupt,
                 InterruptState::EnableInterrupt => unreachable!(),
                 InterruptState::DisableInterrupt => unreachable!(),
             }
         }
         pub fn ei(&mut self){
             self.interrupt =match self.interrupt{
-                InterruptState::AlmostDisabled|InterruptState::Disabled => InterruptState::AlmostEnabled,
+                InterruptState::AlmostDisabled|InterruptState::Disabled => InterruptState::EnableInterrupt,
                 InterruptState::AlmostEnabled|InterruptState::Enabled => InterruptState::Enabled,
                 InterruptState::EnableInterrupt => unreachable!(),
                 InterruptState::DisableInterrupt => unreachable!(),
             }
         } 
-
         pub fn sla(&mut self){
             let reg = self.cpu_state.get_r8_end(self.current_command);
             let operand = self.cpu_state.get_r8_val(reg);                
@@ -575,15 +558,13 @@ pub mod cpu {
             self.cpu_state.set_flags(operand==0,false,false,false);
             self.cpu_state.change_r8(reg, &|x:u8|x.rotate_left(4)); 
         } 
-
         pub fn bit(&mut self){
             let bits : u8 = (self.current_command & 63) >> 3;
             let reg : SingleReg = self.cpu_state.get_r8_end(self.current_command);
             let val : u8 = self.cpu_state.get_r8_val(reg); 
             self.cpu_state.set_flag(Flag::Zero, ((val>>bits)%2) == 1);
             self.cpu_state.set_flag(Flag::Neg, false);
-            self.cpu_state.set_flag(Flag::HalfCarry, true); //???
-            //self.cpu_state.set_flags_tri([btt((val>>bits) % 2 == 1),-1,1,0]);
+            self.cpu_state.set_flag(Flag::HalfCarry, true); //???x
         }
         pub fn res(&mut self){
             let bits : u8 = (self.current_command & 63) >> 3;
@@ -609,10 +590,8 @@ pub mod cpu {
         }
         
         pub fn cb_block(&mut self){
-
             let pc = self.cpu_state.inc_pc();
             self.current_command = self.cpu_state.get_byte(pc);
-            self.is_cb = true;
             let mut fun_pointer: fn(&mut CpuStruct)=CpuStruct::nop;
             let mut waiting= 0;
             let mut cond_waiting = 0;

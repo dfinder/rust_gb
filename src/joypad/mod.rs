@@ -1,0 +1,5 @@
+mod joypad{
+    struct mapping{
+        
+    }
+}

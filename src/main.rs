@@ -14,8 +14,14 @@ pub mod memory;
 extern crate glium;
 fn main() {
     let mut my_cpu = cpu::cpu::CpuStruct::new();
+    let mut graphics_state:&[u8;8192];
+    
+
     loop{
         my_cpu.interpret_command();
+        graphics_state = my_cpu.fetch_graphics();
+
+        
     }
 
     // Set up window/connectivity with OS
