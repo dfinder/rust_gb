@@ -146,7 +146,6 @@ pub mod cpu_state{
         }
         pub fn get_byte(&mut self,addr:u16)->u8{
             self.memory.grab_memory_8(addr)
-
         }
         pub fn get_imm8(&mut self)->u8{
             self.memory.grab_memory_8(self.registers.inc_pc(1))
@@ -179,7 +178,6 @@ pub mod cpu_state{
         }
         pub fn set_half_word(&mut self,addr:u16, value:u16){
             self.memory.set_memory_16(addr, value)
-
         }
         pub fn get_graphics(&mut self) -> &[u8;8192]{
             self.memory.get_graphics()

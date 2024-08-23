@@ -1,19 +1,18 @@
-pub mod screen;
-mod cpu_state;
-mod memory_wrapper;
-pub mod function_table;
-use glutin::api::egl::device;
-use joypad::joypad::{self, Joypad};
-use winit::{event_loop::EventLoopBuilder, keyboard::{Key, KeyCode}};
-use cpu::cpu::CpuStruct;
-use glium::*;
-
-use crate::screen::screen::display_screen;
-pub mod joypad;
 #[macro_use]
+pub mod joypad;
 pub mod cpu;
 pub mod registers;
 pub mod memory;
+pub mod function_table;
+pub mod interrupt;
+pub mod screen;
+pub mod vscreen;
+pub mod cpu_state;
+pub mod memory_wrapper;
+use joypad::joypad::Joypad;
+use winit::{event_loop::EventLoopBuilder, keyboard::KeyCode};
+use crate::screen::screen::display_screen;
+use glium::*;
 extern crate glium;
 fn main() {
     let mut my_cpu = cpu::cpu::CpuStruct::new();
@@ -21,7 +20,7 @@ fn main() {
     let event_loop = EventLoopBuilder::new().build().expect("event loop building");
     let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
     let mut frame = display.draw();
-    let mut joypad:Joypad = joypad::joypad::Joypad::new([KeyCode::KeyZ, KeyCode::KeyX, KeyCode::ArrowUp,KeyCode::ArrowDown,KeyCode::ArrowLeft,KeyCode::ArrowRight,KeyCode::KeyM, KeyCode::KeyN]);
+    let mut joypad:Joypad = joypad::joypad::Joypad::new([KeyCode::KeyM, KeyCode::KeyN,KeyCode::KeyZ, KeyCode::KeyX, KeyCode::ArrowDown,KeyCode::ArrowUp,KeyCode::ArrowLeft,KeyCode::ArrowRight]);
     loop{
         my_cpu.interpret_command();
         graphics_state = my_cpu.fetch_graphics();
@@ -40,7 +39,7 @@ fn main() {
                 _ => (),
             };}
          );
-        display_screen(&display, &frame);
+        display_screen(&display, &frame,graphics_state);
         frame.finish().unwrap();
     }
 

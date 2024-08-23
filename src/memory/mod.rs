@@ -5,7 +5,7 @@ pub mod memory{
     
     use crate::cpu::cpu::{self, CpuStruct};
     pub struct MemoryStruct{
-        my_memory:[u8;65536]
+        my_memory:[u8;65536] //This doesn't work. :|
     }
     impl MemoryStruct{
         pub fn new()->Self{

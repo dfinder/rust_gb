@@ -16,8 +16,7 @@ pub mod screen {
     }
     implement_vertex!(Vertex, position);
     //use crate::glutin::surface::SurfaceTypeTrait;
-    
-    pub fn display_screen(display: &Display<WindowSurface>, frame: &Frame){
+    pub fn display_screen(display: &Display<WindowSurface>, frame: &Frame, gb_screen:VScreen){
 
 
         let vertex1 = Vertex { position: [-0.5, -0.5] };
