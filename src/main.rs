@@ -6,17 +6,20 @@ pub mod memory;
 pub mod function_table;
 pub mod interrupt;
 pub mod screen;
-pub mod vscreen;
+pub mod ppu;
 pub mod cpu_state;
 pub mod memory_wrapper;
+pub mod audio;
+use memory_wrapper::vram::vram::Vram;
+use sdl2; 
 use joypad::joypad::Joypad;
 use winit::{event_loop::EventLoopBuilder, keyboard::KeyCode};
 use crate::screen::screen::display_screen;
-use glium::*;
-extern crate glium;
+use glium;
 fn main() {
+    let sdl_context = sdl2::init().unwrap();
     let mut my_cpu = cpu::cpu::CpuStruct::new();
-    let mut graphics_state:&[u8;8192]; //This doesn't actually have to be a borrow
+    let mut graphics_state:&Vram; //This doesn't actually have to be a borrow
     let event_loop = EventLoopBuilder::new().build().expect("event loop building");
     let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
     let mut frame = display.draw();

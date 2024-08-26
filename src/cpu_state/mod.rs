@@ -2,7 +2,7 @@
 use crate::registers::registers::*;
 pub mod cpu_state{
 
-    use crate::memory_wrapper::memory_wrapper::MemWrap;
+    use crate::memory_wrapper::{memory_wrapper::MemWrap, vram::vram::Vram};
 
     use super::{DoubleReg, Flag, RegStruct, SingleReg};
 
@@ -179,8 +179,8 @@ pub mod cpu_state{
         pub fn set_half_word(&mut self,addr:u16, value:u16){
             self.memory.set_memory_16(addr, value)
         }
-        pub fn get_graphics(&mut self) -> &[u8;8192]{
-            self.memory.get_graphics()
+        pub fn get_graphics(&mut self) -> &Vram{
+            self.memory.get_vram()
         }
     }
 }

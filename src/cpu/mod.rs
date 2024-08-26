@@ -1,6 +1,7 @@
 
 
 pub mod cpu { 
+    use crate::memory_wrapper::vram::vram::Vram;
     use crate::registers::registers::{self, SingleReg};
     use crate::registers::registers::*;
     use crate::cpu_state::cpu_state::*;
@@ -123,7 +124,7 @@ pub mod cpu {
             }//Find a different way of doing this:
             //Break things apart according to our old pipeline model
         }
-        pub fn fetch_graphics(&mut self)->&[u8;8192]{
+        pub fn fetch_graphics(&mut self)->&Vram{
             self.cpu_state.get_graphics()
         }
         pub fn interpret_command(&mut self){ //function_lookup:&[FunFind;63], cb_lookup:&[FunFind;11]

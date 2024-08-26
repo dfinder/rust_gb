@@ -31,7 +31,7 @@ pub mod joypad{
             }
         }
         pub fn process_keystrokes(&mut self, cpu:&mut CpuStruct, d_id: DeviceId, key_event: KeyEvent, synthetic: bool){
-          for (index,key_wrapper ) in self.mapping.iter().enumerate(){
+          for key_wrapper in self.mapping.iter_mut(){
             //match key_event
             if synthetic == false && key_event.repeat==false {
                 match key_event.physical_key{

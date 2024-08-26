@@ -1,15 +1,12 @@
 //
 //use crate::Surface
 
-pub mod screen {
+pub mod screen { //Have you considered: SDL
     use glium::*;
-    use glium::Surface; 
-    use glium::backend::Facade;
     use crate::glutin::surface::ResizeableSurface;
     use crate::glutin::surface::SurfaceTypeTrait;
     use crate::glutin::surface::*;
     
-    use winit::window::Window;
     #[derive(Copy, Clone)]
     struct Vertex {
         position: [f32; 2],

@@ -35,7 +35,7 @@ pub mod memory{
             self.my_memory[(addr+1) as usize] = (value % (1<<8)) as u8;
         }
         pub fn get_graphics_memory(&mut self)->&[u8;8192]{
-            return &self.my_memory[0x8000..0xA000].try_into().expect("oopsie, that's the wrong memory size")
+            return self.my_memory[0x8000..0xA000].try_into().expect("oopsie, that's the wrong memory size")
         }
     }
 }
