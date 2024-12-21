@@ -1,9 +1,9 @@
-pub mod interrupt{
-    pub enum InterruptType{
+pub mod interrupt {
+    pub enum InterruptType {
         VBlank,
         LCDC,
         Timer,
         Serial, //Unimplemented
-        Input
+        Input,
     }
 }
