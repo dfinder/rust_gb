@@ -1,19 +1,25 @@
 use crate::registers::registers::*;
 pub mod cpu_state {
-
     use std::{cell::RefCell, fs::File, rc::Rc};
 
     use super::{DoubleReg, Flag, RegStruct, SingleReg};
-    use crate::{joypad::joypad::Joypad, memory_wrapper::{audio_controller::audio_controller::AudioController, memory_wrapper::MemWrap}, screen::ppu::ppu::PixelColor};
+    use crate::{
+        audio::audio_controller::AudioController, joypad::joypad::Joypad,
+        memory_wrapper::memory_wrapper::MemWrap, screen::ppu::ppu::PixelColor,
+    };
 
     pub struct CpuState {
         memory: MemWrap,
         registers: RegStruct,
     }
     impl CpuState {
-        pub fn new(joypad:Rc<RefCell<Joypad>>,audio_con:Rc<RefCell<AudioController>>, cartridge:File) -> Self {
+        pub fn new(
+            joypad: Rc<RefCell<Joypad>>,
+            audio_con: Rc<RefCell<AudioController>>,
+            cartridge: File,
+        ) -> Self {
             Self {
-                memory: MemWrap::new(joypad,audio_con,cartridge),
+                memory: MemWrap::new(joypad, audio_con, cartridge),
                 registers: RegStruct::new(),
             }
         }

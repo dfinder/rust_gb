@@ -5,7 +5,7 @@ pub mod joypad {
     };
 
     use crate::cpu::cpu::CpuStruct;
-    use crate::interrupt::interrupt::InterruptType;
+    use crate::interrupt::interrupt::Interrupt;
     #[derive(Clone, Copy)]
     enum GBKey {
         Start,
@@ -92,7 +92,7 @@ pub mod joypad {
                                 key_wrapper.state = !key_event.state.is_pressed();
                                 if !key_event.state.is_pressed() {
                                     //cpu.unstop();
-                                    cpu.interrupt(InterruptType::Input);
+                                    cpu.interrupt(Interrupt::Input);
                                 }
                             }
                         }

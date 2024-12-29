@@ -3,19 +3,21 @@ pub mod mapped_io {
     use std::{cell::RefCell, rc::Rc};
 
     use crate::{
-        joypad::joypad::Joypad,
-        memory_wrapper::{
-            audio_controller::audio_controller::AudioController, memory_wrapper::AsMemory,
-        }, screen::video_controller::video_controller::VideoController,
+        audio::audio_controller::AudioController, joypad::joypad::Joypad,
+        memory_wrapper::memory_wrapper::AsMemory, screen::ppu::ppu::VideoController,
     };
 
     struct JoypadMIO {
         joypad_state: u8,
         buttons_ref: Rc<RefCell<Joypad>>,
     }
-    impl AsByte for JoypadMIO { //Consider merging these concepts.
+    impl AsByte for JoypadMIO {
+        //Consider merging these concepts.
         fn read(&mut self) -> u8 {
-            self.joypad_state = self.buttons_ref.borrow().set_key_stroke_nibble(self.joypad_state);
+            self.joypad_state = self
+                .buttons_ref
+                .borrow()
+                .set_key_stroke_nibble(self.joypad_state);
             self.joypad_state
         }
 
@@ -26,6 +28,15 @@ pub mod mapped_io {
     struct Serial {
         sb: u8, //Outside of scope :|
         sc: u8,
+    }
+    impl AsMemory for Serial{
+        fn memory_map(&mut self, _addr: u16) -> u8 {
+            0
+        }
+    
+        fn memory_write(&mut self, _addr: u16, _val: u8) {
+            ()
+        }
     }
     trait AsByte {
         fn read(&mut self) -> u8;
@@ -65,7 +76,13 @@ pub mod mapped_io {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
-            todo!()
+            match addr {
+                0 => self.divider.write(val),
+                1 => todo!(),
+                2 => todo!(),
+                3 => todo!(),
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -109,6 +126,7 @@ pub mod mapped_io {
         video_controller: Rc<RefCell<VideoController>>,
         boot_control: u8,
         ie: u8, //LCDControl,
+        interrupt_flag:InterruptFlag,
     }
 
     impl MappedIO {
@@ -136,6 +154,7 @@ pub mod mapped_io {
                 ie: 0,
                 audio_controller: audio_con,
                 video_controller: video_con,
+                interrupt_flag:InterruptFlag{inf:0}
             };
         }
     }
@@ -143,15 +162,17 @@ pub mod mapped_io {
         fn memory_map(&mut self, addr: u16) -> u8 {
             match addr {
                 //todo!()
-                0x0000 => self.joypad.read(),
-                0x0001 => todo!(),
-                0x0002 => todo!(), //Serial
-                0x0003 => todo!(), //Unmapped
-                0x0004..=0x0007 => self.timer.memory_map(addr - 0x0004),
-                0x000f => 0xE0 | self.iflag,
-                0x0010 => todo!(),
-                //0x0040 => self.lcd_control,
+                0x00 => self.joypad.read(),
+                0x01 => 0, //Serial
+                0x02 => 0,
+                0x03 => 0,
+                0x04..=0x07 => self.timer.memory_map(addr - 0x0004),
+                0x0f => 0xE0 | self.iflag,
+                0x10..0x26 => self.audio_controller.borrow_mut().memory_map(addr-0x0010),
+                0x40..=0x4b => self.video_controller.borrow_mut().memory_map(addr-0x0040),
                 //=>
+                0x50=>self.boot_control,
+                0xff => self.ie,
                 _ => unreachable!(),
             }
         }
@@ -165,12 +186,14 @@ pub mod mapped_io {
                 0x0003 => todo!(), //Unmapped
                 0x0004..=0x0007 => self.timer.memory_write(addr - 0x0004, val),
                 0x000f => self.iflag = 0xE0 | val,
-                0x0010..=0x0030 => self
+                0x0010..=0x003f => self
                     .audio_controller
                     .borrow_mut()
                     .memory_write(addr - 0x0010, val),
-                //0x0040 => self.lcd_control,
-                //=>
+
+                0x40..=0x4b => self.video_controller.borrow_mut().memory_write(addr-0x0040,val),
+                0x50=>self.boot_control=val,
+                0xff => self.ie=val,
                 _ => unreachable!(),
             }
         }

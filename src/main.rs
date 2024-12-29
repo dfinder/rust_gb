@@ -1,28 +1,28 @@
 #[macro_use]
 pub mod joypad;
 pub mod audio;
+pub mod cartridge;
 pub mod cpu;
 pub mod cpu_state;
 pub mod function_table;
 pub mod interrupt;
-pub mod memory;
 pub mod memory_wrapper;
 pub mod registers;
 pub mod screen;
 use std::{cell::RefCell, fs::File, rc::Rc};
 
 use crate::screen::screen::display_screen;
+use audio::audio_controller::AudioController;
 use glium::{self};
 use joypad::joypad::Joypad;
-use memory_wrapper::audio_controller::audio_controller::AudioController;
 use sdl2::{self};
 use winit::{event_loop::EventLoop, keyboard::KeyCode};
 fn main() {
     let sdl_context = sdl2::init().unwrap();
     let event_loop = EventLoop::builder().build().expect("test");
     let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
-    let mut audio_controller= AudioController::new();
-    let cartridge= File::open("~/Mario.gb").expect("msg");
+    let audio_controller = AudioController::new();
+    let cartridge = File::open("~/Mario.gb").expect("msg");
     let mut joypad: Joypad = joypad::joypad::Joypad::new([
         KeyCode::KeyM,
         KeyCode::KeyN,
@@ -34,7 +34,11 @@ fn main() {
         KeyCode::ArrowRight,
     ]);
 
-    let my_cpu = &mut cpu::cpu::CpuStruct::new(Rc::new(RefCell::new(joypad)),Rc::new(RefCell::new(audio_controller)),cartridge);
+    let my_cpu = &mut cpu::cpu::CpuStruct::new(
+        Rc::new(RefCell::new(joypad)),
+        Rc::new(RefCell::new(audio_controller)),
+        cartridge,
+    );
     let _ = event_loop.run(move |event, window_target| {
         let frame = display.draw();
         let my_cpu = my_cpu.interpret_command();

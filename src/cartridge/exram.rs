@@ -1,11 +1,13 @@
 pub mod exram {
+    use std::{fs::File, io::Bytes};
+
     use crate::memory_wrapper::memory_wrapper::AsMemory;
 
     pub struct ExRam {
         //Determined by cart type!
     }
     impl ExRam {
-        pub fn new() -> Self {
+        pub fn new(contents: Vec<u8>) -> Self {
             ExRam {}
         }
     }

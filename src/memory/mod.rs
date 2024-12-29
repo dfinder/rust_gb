@@ -1,8 +1,6 @@
 pub mod memory {
-
     use std::fs::File;
     use std::io::Read;
-
     use crate::cpu::cpu::{self, CpuStruct};
     pub struct MemoryStruct {
         my_memory: [u8; 65536], //This doesn't work. :|

@@ -2,8 +2,8 @@
 //use crate::Surface
 pub mod oam;
 pub mod ppu;
-pub mod vram;
 pub mod video_controller;
+pub mod vram;
 pub mod screen {
     //Have you considered: SDL
     use glium::*;
@@ -12,6 +12,20 @@ pub mod screen {
     use crate::glium::glutin::surface::*;
 
     use super::ppu::ppu::PixelColor;
+    pub struct VideoController {
+        pub lcdc: u8,
+        pub stat: u8,
+        pub scy: u8,
+        pub scx: u8,
+        pub ly: u8,
+        pub lyc: u8,
+        pub dma: u8,
+        pub bgp: u8,
+        pub obp0: u8,
+        pub obp1: u8,
+        pub wy: u8,
+        pub wx: u8,
+    }
 
     #[derive(Copy, Clone)]
     struct Vertex {

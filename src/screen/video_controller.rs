@@ -2,7 +2,7 @@ pub mod video_controller {
     pub struct VideoController {
         pub lcdc: u8,
         pub stat: u8,
-        pub scy: u8, 
+        pub scy: u8,
         pub scx: u8,
         pub ly: u8,
         pub lyc: u8,

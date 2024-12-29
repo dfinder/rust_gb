@@ -1,5 +1,5 @@
 pub mod interrupt {
-    pub enum InterruptType {
+    pub enum Interrupt {
         VBlank,
         LCDC,
         Timer,

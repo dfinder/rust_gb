@@ -4,14 +4,21 @@ pub mod oam {
     pub struct OamStruct {
         oam_list: [Oam; 40],
     }
-    impl OamStruct{
-        pub fn new()->Self{
-            return Self { oam_list: [Oam{ypos:0,xpos:0,tile_index:0,attributes:0};40] }
+    impl OamStruct {
+        pub fn new() -> Self {
+            return Self {
+                oam_list: [Oam {
+                    ypos: 0,
+                    xpos: 0,
+                    tile_index: 0,
+                    attributes: 0,
+                }; 40],
+            };
         }
     }
 
     #[derive(Clone, Copy)]
-    struct Oam {
+    pub struct Oam {
         ypos: u8,
         xpos: u8,
         tile_index: u8,

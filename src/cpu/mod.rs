@@ -1,8 +1,8 @@
 pub mod cpu {
+    use crate::audio::audio_controller::AudioController;
     use crate::cpu_state::cpu_state::*;
     use crate::function_table::function_table::FunFind;
     use crate::joypad::joypad::Joypad;
-    use crate::memory_wrapper::audio_controller::audio_controller::AudioController;
     use crate::registers::registers::*;
     use crate::registers::registers::{self, SingleReg};
     use crate::screen::ppu::ppu::PixelColor;
@@ -12,7 +12,7 @@ pub mod cpu {
     use std::time::Duration;
     use std::{thread, time};
     const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
-    use crate::interrupt::interrupt::InterruptType;
+    use crate::interrupt::interrupt::Interrupt;
     pub type CPUFunct = fn(&mut CpuStruct);
     enum InterruptState {
         Enabled, //Despite naming, it's really that we have E, DI, AD as "enabled" states
@@ -35,9 +35,13 @@ pub mod cpu {
                       //argument:Argument;
     }
     impl CpuStruct {
-        pub fn new(joypad:Rc<RefCell<Joypad>>,audio: Rc<RefCell<AudioController>>,cartridge:File) -> Self {
+        pub fn new(
+            joypad: Rc<RefCell<Joypad>>,
+            audio: Rc<RefCell<AudioController>>,
+            cartridge: File,
+        ) -> Self {
             Self {
-                cpu_state: CpuState::new(joypad,audio,cartridge),
+                cpu_state: CpuState::new(joypad, audio, cartridge),
                 instruction_register: 0x00, //initalize to a noop
                 function_lookup: [
                     //Block 1,
@@ -716,17 +720,17 @@ pub mod cpu {
             }
             //Vblank has the highest priority
         }
-        pub fn interrupt(&mut self, interrupt: InterruptType) {
+        pub fn interrupt(&mut self, interrupt: Interrupt) {
             match self.ime_flag {
                 InterruptState::Enabled | InterruptState::DisableInterrupt => (),
                 _ => return (),
             };
             let bit_idx: u8 = match interrupt {
-                InterruptType::VBlank => 0,
-                InterruptType::LCDC => 1,
-                InterruptType::Timer => 2,
-                InterruptType::Serial => 3,
-                InterruptType::Input => 4,
+                Interrupt::VBlank => 0,
+                Interrupt::LCDC => 1,
+                Interrupt::Timer => 2,
+                Interrupt::Serial => 3,
+                Interrupt::Input => 4,
             };
             let mut current_interrupt_flag: u8 = self.cpu_state.get_byte(0xFF0F);
             current_interrupt_flag |= 1 << bit_idx;
