@@ -1,3 +1,5 @@
 pub mod rom {
-    pub struct RomStruct {}
+    pub struct RomStruct {
+        
+    }
 }

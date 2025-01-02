@@ -4,7 +4,7 @@ pub mod mapped_io {
 
     use crate::{
         audio::audio_controller::AudioController, joypad::joypad::Joypad,
-        memory_wrapper::memory_wrapper::AsMemory, screen::ppu::ppu::VideoController,
+        memory_wrapper::memory_wrapper::AsMemory, screen::video_controller::video_controller::VideoController,
     };
 
     struct JoypadMIO {

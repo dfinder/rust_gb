@@ -1,6 +1,6 @@
 pub mod vram {
 
-    use crate::memory_wrapper::memory_wrapper::AsMemory;
+    use crate::{memory_wrapper::memory_wrapper::AsMemory, screen::ppu::ppu::ColorID};
 
     #[repr(packed)]
     pub struct Vram {
@@ -10,6 +10,13 @@ pub mod vram {
         pub tmap1: TileMap, //9800->9BFF
         pub tmap2: TileMap, //9C00->9FFF
     }
+    pub type Tile= [[ColorID;8];8];
+    
+    pub fn empty_tile() -> Tile{
+        return [[ColorID::Unset;8];8]
+    }
+   
+   
     impl Vram {
         pub fn new() -> Self {
             return Vram {
@@ -110,10 +117,51 @@ pub mod vram {
         fn interleave(&mut self, a: u8, b: u8) -> u16 {
             (self.interleave_with_zeros(b) << 1) | self.interleave_with_zeros(a)
         }
-        pub fn get_tile(&mut self) -> [u16; 8] {
+        pub fn get_tile(&mut self) -> Tile{
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
                 ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
+            }
+            return ret.map(|x|Self::color_palette(x))
+        }
+        pub fn get_tile_backwards(&mut self) -> Tile{
+            let mut ret: [u16; 8] = [0; 8];
+            for i in 0..7 {
+                ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
+            }
+            let mut ret_tile = ret.map(|x|Self::color_palette_reverse(x));
+            ret_tile.reverse();
+            return ret_tile
+        }
+        pub fn color_palette(color:u16)->[ColorID;8]{
+            let mut ret = [ColorID::Unset; 8];
+            let mut loc_color = color;
+            for i in 0..8 {
+                let pixel = color & 0x03;
+                ret[7 - i] = match pixel {
+                    0 => ColorID::Zero,
+                    1 => ColorID::One,
+                    2 => ColorID::Two,
+                    3 => ColorID::Three,
+                    _ => unreachable!(),
+                };
+                loc_color = loc_color >> 2
+            }
+            ret
+        }
+        pub fn color_palette_reverse(color:u16)->[ColorID;8]{
+            let mut ret = [ColorID::Unset; 8];
+            let mut loc_color = color;
+            for i in 0..8 {
+                let pixel = color & 0x03;
+                ret[7 - i] = match pixel {
+                    0 => ColorID::Zero,
+                    1 => ColorID::Two,
+                    2 => ColorID::One,
+                    3 => ColorID::Three,
+                    _ => unreachable!(),
+                };
+                loc_color = loc_color >> 2
             }
             ret
         }

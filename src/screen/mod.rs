@@ -4,6 +4,7 @@ pub mod oam;
 pub mod ppu;
 pub mod video_controller;
 pub mod vram;
+pub mod pixelqueue;
 pub mod screen {
 
     use sdl2::{rect::Point, render::Canvas, video::Window,pixels::Color};

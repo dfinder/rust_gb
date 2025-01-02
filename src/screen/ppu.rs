@@ -1,92 +1,26 @@
 pub mod ppu {
-    use std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
 
     use crate::{
         interrupt::interrupt::Interrupt,
         memory_wrapper::memory_wrapper::AsMemory,
         screen::{
-            oam::oam::{Oam, OamStruct},
-            vram::vram::Vram,
+            oam::oam::{Oam, OamStruct},video_controller::video_controller::VideoController, vram::vram::Vram
         },
     };
-    #[derive(Clone, Copy)]
-    pub struct VideoController {
-        pub lcdc: u8, //LCD Control
-        pub stat: u8, //Interrupts
-        pub scy: u8,  //Background viewport Y
-        pub scx: u8,  //Background viewport X
-        pub ly: u8,   //Line of drawing
-        pub lyc: u8,  //Line to compare
-        pub dma: u8,  //DMA!
-        pub bgp: u8,  //Background Palette Data
-        pub obp0: u8, //Oboject palette 1
-        pub obp1: u8, //Object palette 2
-        pub wy: u8,   //Window Y
-        pub wx: u8,   //Window X
-    }
-    impl AsMemory for VideoController {
-        //Remember
-        fn memory_map(&mut self, addr: u16) -> u8 {
-            match addr {
-                0 => self.lcdc, //LCD control register, controls which banks are used, whether windows/background is used, etc. 
-                1 => self.stat, //Interrupts
-                2 => self.scy, //Background viewport Y
-                3 => self.scx,  //Background viewport X
-                4 => self.ly,   //Line of drawing
-                5 => self.lyc,  //Line to compare
-                6 => self.dma,  //DMA!
-                7 => self.bgp,  //Background Pallete Data
-                8 => self.obp0, //Oboject palette 1
-                9 => self.obp1, //Object palette 2
-                0xa => self.wy, //Window Y
-                0xb => self.wx, //Window X
-                _ => unreachable!(),
-            }
-        }
-
-        fn memory_write(&mut self, addr: u16, val: u8) {
-            match addr {
-                0 => self.lcdc = val,
-                1 => self.stat = val&0xFB,
-                2 => self.scy = val,    //Background Viewport Y
-                3 => self.scx = val,  //Background viewport X
-                4 => (),   //Line of drawing, is READ ONLY
-                5 => self.lyc = val,  //Line to compare
-                6 => self.dma = val,  //DMA! Controls a fun bypass between RAM and VRAM
-                7 => self.bgp = val,  //Background Pallette Data
-                8 => self.obp0 = val, //Object palette 1
-                9 => self.obp1 = val, //Object palette 2
-                0xa => self.wy = val, //Window Y
-                0xb => self.wx = val, //Window X
-                _ => unreachable!(),
-            }
-        }
-    }
-    type VirtualInternalScreen = [[PaletteColor; 256]; 256];
-    type ObjScreen = [[PaletteColor; 160]; 144];
+   
+    //type VirtualInternalScreen = [[Tile; 32]; 32];
+    //type ObjScreen = [[ColorID; 160]; 144];
     type VirtualBoundedScreen = [[GBColor; 160]; 144];
-    struct  PreRenderedScreen {
-        background:VirtualInternalScreen,window:VirtualInternalScreen,objects:ObjScreen
-    }
-    #[derive(Copy,Clone)]
-    struct FIFOPixel{
-        color:PaletteColor,
-        palette:bool,
-        priority:bool
-    }
+  
     pub struct Ppu {
-        //This gets to be _fun_
-        virtual_screen_layers: PreRenderedScreen,
         virtual_unrendered_screen: VirtualBoundedScreen,
         virtual_rendered_screen: VirtualBoundedScreen,
         pub vram: Vram,
         pub oam: OamStruct,
         dots: u16,
-        mode_3_penalty: u16,
-        background_fifo: [Option<FIFOPixel>;16],
-
-        obj_fifo: [Option<FIFOPixel>;16],
+        objs:([Option<u8>;10],u8),
         video_controller: Rc<RefCell<VideoController>>, //vram:[u8;0x1800],
                                                         //oam:[[u8;4];40],
     }
@@ -100,125 +34,194 @@ pub mod ppu {
     }
     #[derive(Copy,Clone)]
     #[derive(Eq, Hash, PartialEq)]
-    pub enum PaletteColor {
+    pub enum ColorID {
         Unset,
         Zero,
         One,
         Two,
         Three
     }
+
+    /**pub struct PixelFetcher{
+        mode_3_penalty:u8,
+        background_fifo:PixelFIFO,
+        obj_fifo:PixelFIFO,
+        objs:([Option<u8>;10],u8),
+        current_pixel:u8,
+        stage:Stage,
+
+    }**/
     impl Ppu {
         pub fn new(vc: Rc<RefCell<VideoController>>) -> Self {
             return Self {
                 virtual_unrendered_screen: [[GBColor::Transparent; 160]; 144],
-                virtual_rendered_screen: [[GBColor::Transparent; 160];144],
-                virtual_screen_layers:PreRenderedScreen{ background:[[PaletteColor::Unset;256];256], window:[[PaletteColor::Unset;256];256], objects: [[PaletteColor::Unset;160];144]},
+                virtual_rendered_screen: [[GBColor::Transparent; 160]; 144],
                 vram: Vram::new(),
                 oam: OamStruct::new(),
                 dots: 0, //0..456
                 video_controller: vc,
-                mode_3_penalty: 0,
-                background_fifo:[None;16],
-                obj_fifo:[None;16]
+                objs: ([None;10],0),
+            }
                
-            };
         }
         pub fn get_screen(&self) -> VirtualBoundedScreen {
             return self.virtual_rendered_screen;
         }
         pub fn hblank(&mut self) {}
         pub fn vblank(&mut self) {}
-        pub fn init_mode_3(&mut self) {
-            //let mut ret= [[PaletteColor::Unset; 167]; 144+16+16];
-            let vc;
-            {
-                vc = self.video_controller.borrow().clone();
-            }
-            let window_enabled = vc.lcdc >> 5 % 2 == 1;
-            if vc.lcdc % 2 == 1 {
-                self.generate_background();
-                //for y in 0..182 {
-                //    for x in 7..151 {
-                //        self.virtual_prerendered_screen.background[y][x] =
-                //            background[(vc.scy as usize + y) % 256][vc.scx as usize + x % 256]
-                //    }
-                //}
-                if window_enabled {
-                    self.generate_window();
-                    //for y in 0..182 - vc.wy {
-                    //    for x in 0..151 - vc.wx {
-                    //        if x - 7 + vc.wx > 0 {
-                    //            ret[(vc.wy + y) as usize][(x - 7 + vc.wx) as usize] =
-                    //                window[y as usize][x as usize]
-                    //        }
-                    //    }
-                    //}
-                }
-                //Background is on, check background first.
-                 // for i in 16..160{
-                //     for j in 7..167{
-                //         self.virtual_unrendered_screen[j-7][i-16]=ret[j][i]
-                //     }
-                //  }
-            }
-        }
-          
         pub fn oam_scan(&mut self){
             let vc;
             {
                 vc = self.video_controller.borrow().clone();
             }
-            if (vc.lcdc >> 1) % 2 == 1 {
-                let mut objects: [Option<Oam>; 10] = [None; 10];
-                let mut count = 0;
-                let big = (vc.lcdc >> 2) % 2 == 1;
-                for oam in self.oam.oam_list{
-                    if count==10{
-                        break
-                    }
-                    if (oam.ypos..oam.ypos+8+(8*(big as u8))).contains(&vc.ly){
-                        objects[count]=Some(oam);
-                        count+=1;
-                    }
-                }
-                //Obj is on
-                if !big{
-                    //Obj is sized with 8x8
-                } else { //Obj is sized with 8x16
+            if self.objs.1==10{
+                return
+            }
 
+            if (vc.lcdc >> 1) % 2 == 1 && self.dots%2 ==0{
+                let big = (vc.lcdc >> 2) % 2 == 1;
+                let oam = self.oam.oam_list[(self.dots>>1) as usize];   
+                let count:usize = self.objs.1 as usize;
+                if (oam.ypos..oam.ypos+8+(8*(big as u8))).contains(&vc.ly){
+                    self.objs.0[count]=Some((self.dots>>1) as u8);
+                    self.objs.1+=1;
                 }
             }
-                
         }
-        fn draw_pixel(&mut self){
+        fn draw_line(&mut self){ //Run Mode 3 algorithm
+            let bgp = self.video_controller.borrow().bgp;
+            let color_mapping = |x| match x{
+                0 => GBColor::White,
+                1 => GBColor::LightGrey,
+                2 => GBColor::DarkGrey,
+                3 => GBColor::Black,
+                _=>unreachable!()
+            };
+            let background_palette= |x| match x{
+                ColorID::Zero=>color_mapping(bgp & 0x03),
+                ColorID::One=> color_mapping(bgp & 0x0C >> 2),
+                ColorID::Two=> color_mapping(bgp & 0x30 >> 4),
+                ColorID::Three=> color_mapping(bgp >> 6),
+                ColorID::Unset => unreachable!(),
+            };
+          
+            let mut pixel_line = [GBColor::Transparent;160];
+            let mut background:[GBColor;256] = [GBColor::Transparent;256]; //A leaner system, I think
+
+            let mut window:[GBColor;256] = [GBColor::Transparent;256];
+            let mut obj_layer: [[ColorID;160];144] = [[ColorID::Unset;160];144];
+            
+            //let mut canvas : [[GBColor;160];144]= [[GBColor::Transparent;160];144];
+
+            let vc = self.video_controller.borrow().clone();
+
+            if vc.lcdc %2 == 1{
+                //Actually work with window/background
+                let tile_data_area = match vc.lcdc >>4 %2 != 0{
+                    true => (&self.vram.block0,&self.vram.block1),
+                    false => (&self.vram.block2,&self.vram.block1)
+                };
+                let title_data_lookup = |x:u8| match x{
+                    0..128=> tile_data_area.0.objects[x as usize],
+                    128..=255=>tile_data_area.1.objects[(x-128) as usize],
+                }.get_tile();
+                if vc.lcdc>>5 %2 != 0 && vc.wy<vc.ly{ //Actually ues the window
+                    let window_tile_map = match vc.lcdc>>5 %2 != 0 {
+                        true => &self.vram.tmap2,
+                        false => &self.vram.tmap1
+                    };
+                    for tile_x in 0..32{
+                        let tile_y = vc.ly>>3;
+                        let in_tile_row =vc.ly%8;
+                        for in_tile_x in 0..8{
+                            window[8*tile_x+in_tile_x]=
+                                background_palette(title_data_lookup(window_tile_map.tiles[tile_y as usize][tile_x])[in_tile_row as usize][in_tile_x]);
+                        }
+                    }
+                }
+                let bg_tile_map = match vc.lcdc >> 3 %2 !=0{
+                    true => &self.vram.tmap2,
+                    false => &self.vram.tmap1
+                };
+                for tile_x in 0..32{
+                    let view_port_y = vc.scy-vc.ly;
+                    let tile_y = view_port_y>3;
+                    let in_tile_row = view_port_y%8;
+                    for in_tile_x in 0..8{
+                        background[8*tile_x+in_tile_x]=
+                            background_palette(title_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x])[in_tile_row as usize][in_tile_x]);
+                    }
+                }
+
+                for i in 0..160{
+                    pixel_line[i]=background[(i+vc.scx as usize) % 256]
+                }
+                if vc.lcdc>>5 %2 != 0 && vc.wy<vc.ly{
+                    for i in 0..160-vc.wx-7{
+                        pixel_line[(vc.wx-7+i) as usize] =window[i as usize]
+                    }
+                }
+            }
+            if vc.lcdc>>1 %2 !=0{
+
+            
+            let obp = |x:Oam| match x.attributes >>4 %2{
+                1=> self.video_controller.borrow().obp1,
+                0=> self.video_controller.borrow().obp0,
+                _=>unreachable!(),
+            };
+            let object_palette= |x,obp:u8| match x{
+                ColorID::Zero=>GBColor::Transparent,
+                ColorID::One=> color_mapping(obp & 0x0C >> 2),
+                ColorID::Two=> color_mapping(obp & 0x30 >> 4),
+                ColorID::Three=> color_mapping(obp >> 6),
+                ColorID::Unset => unreachable!(),
+            };
+            for obj_idx in 0..self.objs.1{
+                let obj = self.objs.0[obj_idx as usize].expect("msg");
+                let oam_obj = self.oam.oam_list[obj as usize];
+                oam_obj.xpos;
+                oam_obj.ypos;
+                oam_obj.tile_index;
+                oam_obj.attributes;
+            }
+        }
+            for i in 0..=160{
+
+            }
+            self.virtual_unrendered_screen[self.video_controller.borrow().ly as usize] = pixel_line;
 
         }
-        pub fn on_ppu(&mut self) -> (Option<Interrupt>,Option<Interrupt>) {
+        fn draw_pixel(&mut self,pixel:GBColor){
+            self.virtual_unrendered_screen[self.video_controller.borrow().ly as usize][(self.dots-80) as usize]=pixel;
+        }
+        
+        pub fn ppu_dot_cycle(&mut self) -> (Option<Interrupt>,Option<Interrupt>) {
             let mut interrupt:(Option<Interrupt>,Option<Interrupt>) = (None,None);
-            let mut run_mode_2: bool = false;
-            let mut run_mode_3: bool = false;
+            let mut init_mode_2: bool = false;
+            let mut init_mode_3: bool = false;
             let ly: u8;
             {
                 let mut vc = self.video_controller.borrow_mut();
                 ly = vc.ly;
-
-                self.dots += 1; //Increase the dot
-                if self.dots==79 && ly<144{
-                    run_mode_2=true
+                if self.dots == 0 && ly < 144 {
+                    init_mode_2=true;
                 }
                 if self.dots == 80 && ly < 144 {
                     vc.stat += 1; //2->3    
-                    run_mode_3=true
+                    init_mode_3=true
                 }
             }
-            {
-                if run_mode_2 {
-                    self.oam_scan(); //This is when we 
+            {   
+                if init_mode_2{
+                    self.objs=([None;10],0);
                 }
-                if run_mode_3 {
-                    self.init_mode_3(); //This is when we 
+                if self.mode()==2 {
+                    self.oam_scan(); //This is when we start scanning the OAM
                 }
-  
+                if init_mode_3 {
+                    self.draw_line(); //This is when we actually do the mode 3 work.
+                }
                 {
                     let mut vc = self.video_controller.borrow_mut();
                     if self.dots > 456 {
@@ -234,8 +237,8 @@ pub mod ppu {
                         } else {
                             vc.stat &= 0xFB //Turn off bit 2, resetting us to mode 1
                         }
-                        if vc.ly < 144 {//ENTER 
-                            //We go from 0->2
+                        if vc.ly < 144 {//ENTER MODE 2
+                            //mode 0->2
                             vc.stat += 2;
                             if vc.stat & 0x20 > 0 {
                                 //Test if LCDC bit 5 is active
@@ -243,14 +246,14 @@ pub mod ppu {
                             }
                         }
                         if vc.ly == 144 {
-                            //We're in 0->1
+                            //mode 0->1
                             vc.stat += 1;
                             self.virtual_rendered_screen=self.virtual_unrendered_screen;
                             self.virtual_unrendered_screen= [[GBColor::Transparent; 160]; 144]; //Reset the internal screen
                             interrupt.1 = Some(Interrupt::VBlank) //Remember, VBlank is a separate  
                         }
                         if vc.ly > 153 {
-                            //1->2
+                            //mode 1->2
                             vc.ly = 0;
                             vc.stat += 1;
                             if vc.stat & 0x20 > 0 {
@@ -258,146 +261,22 @@ pub mod ppu {
                                 interrupt.0 = Some(Interrupt::LCDC)
                             }
                         }
+
+                        if vc.ly > 220  {
+                            //mode 3->0
+                            vc.stat -=3;
+                            if vc.stat & 0x10 > 0 {
+                                //Test if LCDC bit 5 is active
+                                interrupt.0 = Some(Interrupt::LCDC)
+                            }
+                        }
                     }
                 }
-                if self.mode()==3{
-                    self.draw_pixel();
-                }
+                self.dots += 1; //Increase the dot
                 return interrupt;
             }
         }
-        fn pre_bg_palette(color:u16)->[PaletteColor;8]{
-            let mut ret = [PaletteColor::Unset; 8];
-            let mut loc_color = color;
-            for i in 0..8 {
-                let pixel = color & 0x03;
-                ret[7 - i] = match pixel {
-                    0 => PaletteColor::Zero,
-                    1 => PaletteColor::One,
-                    2 => PaletteColor::Two,
-                    3 => PaletteColor::Three,
-                    _ => unreachable!(),
-                };
-                loc_color = loc_color >> 2
-            }
-            ret
-        }
-        fn generate_window(&mut self){
-            //let pre_textured :[[u8;256];256]=[[0;256];256];
-            let lcdc: u8;
-            {
-                lcdc = self.video_controller.borrow().lcdc;
-            }
-            if lcdc >> 7 == 0 {
-                self.virtual_screen_layers.window=[[PaletteColor::Unset; 256]; 256];
-            }
-            let bg_tile_map: &[[u8; 32]; 32];
-            if lcdc & 0x40 > 0 {
-                //
-                bg_tile_map = &self.vram.tmap2.tiles;
-            } else {
-                bg_tile_map = &self.vram.tmap1.tiles;
-            }
-            let pixel_map = |x: u16| Ppu::pre_bg_palette( x);
-            let tile_map = |x: u8| {
-                match x {
-                    0..=0x7f => {
-                        if lcdc & 0x10 > 0 {
-                            self.vram.block0.objects[x as usize]
-                        } else {
-                            self.vram.block2.objects[x as usize]
-                        }
-                    }
-                    0x80..=0xFF => self.vram.block1.objects[(x - 128) as usize],
-                }
-                .get_tile()
-                .map(pixel_map)
-            };
-            let bg_tiles = bg_tile_map.map(|x| x.map(|y| tile_map(y)));
-            for x in 0..32 {
-                for y in 0..32 {
-                    for x_p in 0..8 {
-                        for y_p in 0..8 {
-                            self.virtual_screen_layers.window[y * 8 + y_p][x * 8 + x_p] = bg_tiles[y][x][y_p][x_p]
-                        }
-                    }
-                }
-            }
-        }
-        fn generate_background(&mut self) {
-            //let pre_textured :[[u8;256];256]=[[0;256];256];
-            let lcdc: u8;
-            {
-                lcdc = self.video_controller.borrow().lcdc;
-            }
-            if lcdc >> 7 == 0 {
-                self.virtual_screen_layers.background=[[PaletteColor::Unset; 256]; 256];
-            }
-            let bg_tile_map: &[[u8; 32]; 32];
-            if lcdc & 0x10 > 0 {
-                //
-                bg_tile_map = &self.vram.tmap2.tiles;
-            } else {
-                bg_tile_map = &self.vram.tmap1.tiles;
-            }
-            let pixel_map = |x: u16| Ppu::pre_bg_palette(x);
-            let tile_map = |x: u8| {
-                match x {
-                    0..=0x7f => {
-                        if lcdc & 0x10 > 0 {
-                            self.vram.block0.objects[x as usize]
-                        } else {
-                            self.vram.block2.objects[x as usize]
-                        }
-                    }
-                    0x80..=0xFF => self.vram.block1.objects[(x - 128) as usize],
-                }
-                .get_tile()
-                .map(pixel_map)
-            };
-            let bg_tiles: [[[[PaletteColor; 8]; 8]; 32]; 32] = bg_tile_map.map(|x| x.map(|y| tile_map(y)));
-            for x in 0..32 {
-                for y in 0..32 {
-                    for x_p in 0..8 {
-                        for y_p in 0..8 {
-                            self.virtual_screen_layers.background[y * 8 + y_p][x * 8 + x_p] = bg_tiles[y][x][y_p][x_p]
-                        }
-                    }
-                }
-            }
-        }
-        fn bg_palette(bgp: u8) -> HashMap<PaletteColor,GBColor>{
 
-            let mut mapping = HashMap::<PaletteColor,GBColor>::new();
-            let color_mapping = |x| match x{
-                0 => GBColor::White,
-                1 => GBColor::LightGrey,
-                2 => GBColor::DarkGrey,
-                3 => GBColor::Black,
-                _=>unreachable!()
-            };
-            mapping.insert(PaletteColor::Zero, color_mapping( bgp & 0x03));
-            mapping.insert(PaletteColor::One, color_mapping(bgp & 0x0C >> 2));
-            mapping.insert(PaletteColor::Two, color_mapping(bgp & 0x30 >> 4));
-            mapping.insert(PaletteColor::Three, color_mapping(bgp >> 6));
-            return mapping;
-        }
-        fn obj_palette(bgp: u8) -> HashMap<PaletteColor,GBColor> {
-            let mut mapping = HashMap::<PaletteColor,GBColor>::new();
-            let color_mapping = |x| match x{
-                0 => GBColor::Transparent,
-                1 => GBColor::LightGrey,
-                2 => GBColor::DarkGrey,
-                3 => GBColor::Black,
-                _=>unreachable!()
-            };
-            mapping.insert(PaletteColor::Zero, color_mapping( bgp & 0x03));
-            mapping.insert(PaletteColor::One, color_mapping(bgp & 0x0C >> 2));
-            mapping.insert(PaletteColor::Two, color_mapping(bgp & 0x30 >> 4));
-            mapping.insert(PaletteColor::Three, color_mapping(bgp >> 6));
-            return mapping
-            
-        }
         fn mode(&mut self) -> u8 {
             self.video_controller.borrow().stat % 4
         }

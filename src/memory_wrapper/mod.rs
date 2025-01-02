@@ -9,7 +9,7 @@ pub mod memory_wrapper {
         audio::audio_controller::AudioController,
         cartridge::cartridge::Cartridge,
         joypad::joypad,
-        screen::ppu::ppu::{GBColor, Ppu, VideoController},
+        screen::{ppu::ppu::{GBColor, Ppu,}, video_controller::video_controller::VideoController},
     };
     //use crate::mapped_io;
     pub struct DmaTransfer {
@@ -139,6 +139,9 @@ pub mod memory_wrapper {
         }
         pub fn get_screen(&mut self) -> [[GBColor; 160]; 144] {
             self.ppu.get_screen()
+        }
+        pub fn on_clock(&mut self){
+            self.ppu.ppu_dot_cycle();
         }
         pub fn dma(&mut self) {
             let addr: u16 = 0x0000 + ((self.dma.addr_u) << 8) + self.dma.addr_l;
