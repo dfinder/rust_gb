@@ -2,7 +2,7 @@ pub mod oam {
 
     use crate::memory_wrapper::memory_wrapper::AsMemory;
     pub struct OamStruct {
-        oam_list: [Oam; 40],
+        pub oam_list: [Oam; 40],
     }
     impl OamStruct {
         pub fn new() -> Self {
@@ -19,10 +19,10 @@ pub mod oam {
 
     #[derive(Clone, Copy)]
     pub struct Oam {
-        ypos: u8,
-        xpos: u8,
-        tile_index: u8,
-        attributes: u8,
+        pub ypos: u8,
+        pub xpos: u8,
+        pub tile_index: u8,
+        pub attributes: u8,
     }
     impl AsMemory for Oam {
         fn memory_map(&mut self, addr: u16) -> u8 {

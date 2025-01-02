@@ -8,9 +8,8 @@ pub mod memory_wrapper {
     use crate::{
         audio::audio_controller::AudioController,
         cartridge::cartridge::Cartridge,
-        cpu::cpu::CpuStruct,
         joypad::joypad,
-        screen::ppu::ppu::{PixelColor, Ppu, VideoController},
+        screen::ppu::ppu::{GBColor, Ppu, VideoController},
     };
     //use crate::mapped_io;
     pub struct DmaTransfer {
@@ -25,6 +24,7 @@ pub mod memory_wrapper {
         ppu: Ppu,
         high_ram: [u8; 127],
         dma: DmaTransfer,
+        wait: Rc<RefCell<u8>>
     }
     pub trait AsMemory {
         fn memory_map(&mut self, addr: u16) -> u8;
@@ -85,6 +85,7 @@ pub mod memory_wrapper {
         pub fn new(
             joypad: std::rc::Rc<RefCell<joypad::Joypad>>,
             audio: Rc<RefCell<AudioController>>,
+            wait_ref:Rc<RefCell<u8>>,
             cartridge: File,
         ) -> Self {
             let vcontroller = Rc::new(RefCell::new(VideoController {
@@ -115,16 +116,18 @@ pub mod memory_wrapper {
                     addr_u: 0,
                     addr_l: 0,
                 },
+                wait:wait_ref
             }
         }
         pub fn grab_memory_8(&mut self, addr: u16) -> u8 {
-            CpuStruct::wait(2);
+            *self.wait.borrow_mut()+=2;
             self.memory_map(addr)
             //self.my_memory[addr as usize]
         }
         pub fn grab_memory_16(&mut self, addr: u16) -> u16 {
             //#REMEMBER THIS IS IN LITTLE ENDIAN ORDER! THE BULLSHIT ONE! WE PUT THE SECOND BYTE FIRST
-            CpuStruct::wait(4);
+            
+            *self.wait.borrow_mut()+=4; //
             (self.memory_map(addr + 1) as u16) << 8 + (self.memory_map(addr + 1) as u16)
         }
         pub fn set_memory_8(&mut self, addr: u16, value: u8) {
@@ -134,7 +137,7 @@ pub mod memory_wrapper {
             self.memory_write(addr, (value >> 8) as u8);
             self.memory_write(addr, (value % (1 << 8)) as u8);
         }
-        pub fn get_screen(&mut self) -> [[PixelColor; 160]; 144] {
+        pub fn get_screen(&mut self) -> [[GBColor; 160]; 144] {
             self.ppu.get_screen()
         }
         pub fn dma(&mut self) {

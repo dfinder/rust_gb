@@ -1,11 +1,9 @@
 pub mod joypad {
-    use winit::{
-        event::{DeviceId, KeyEvent},
-        keyboard::{KeyCode, PhysicalKey},
-    };
 
-    use crate::cpu::cpu::CpuStruct;
-    use crate::interrupt::interrupt::Interrupt;
+    use sdl2::keyboard::Keycode;
+ 
+
+    use crate::{cpu::cpu::CpuStruct, interrupt::interrupt::Interrupt};
     #[derive(Clone, Copy)]
     enum GBKey {
         Start,
@@ -20,7 +18,7 @@ pub mod joypad {
     #[derive(Clone, Copy)]
     struct KeyWrapper {
         v_key: GBKey,
-        p_key: KeyCode,
+        p_key: Keycode,
         state: bool,
         //time: u32
     }
@@ -30,7 +28,7 @@ pub mod joypad {
     }
 
     impl Joypad {
-        pub fn new(map: [KeyCode; 8]) -> Self {
+        pub fn new(map: [Keycode; 8]) -> Self {
             let start: KeyWrapper = KeyWrapper {
                 v_key: GBKey::Start,
                 p_key: map[0],
@@ -79,25 +77,23 @@ pub mod joypad {
         pub fn process_keystrokes(
             &mut self,
             cpu: &mut CpuStruct,
-            _d_id: DeviceId,
-            key_event: KeyEvent,
-            synthetic: bool,
+            key_event: Option<Keycode>,
+            repeat: bool,
+            orientation: bool,
         ) {
-            for key_wrapper in self.mapping.iter_mut() {
-                //match key_event
-                if synthetic == false && key_event.repeat == false {
-                    match key_event.physical_key {
-                        PhysicalKey::Code(key_press) => {
-                            if key_press == key_wrapper.p_key {
-                                key_wrapper.state = !key_event.state.is_pressed();
-                                if !key_event.state.is_pressed() {
-                                    //cpu.unstop();
+            if !repeat{
+                match key_event{
+                    Some(key_press) => {
+                        for mut button in self.mapping{
+                            if button.p_key==key_press{
+                                button.state = orientation;
+                                if orientation{
                                     cpu.interrupt(Interrupt::Input);
                                 }
                             }
                         }
-                        PhysicalKey::Unidentified(_) => (),
-                    }
+                    },
+                    None => ()
                 }
             }
         }

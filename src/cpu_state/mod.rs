@@ -5,7 +5,7 @@ pub mod cpu_state {
     use super::{DoubleReg, Flag, RegStruct, SingleReg};
     use crate::{
         audio::audio_controller::AudioController, joypad::joypad::Joypad,
-        memory_wrapper::memory_wrapper::MemWrap, screen::ppu::ppu::PixelColor,
+        memory_wrapper::memory_wrapper::MemWrap, screen::ppu::ppu::GBColor,
     };
 
     pub struct CpuState {
@@ -16,10 +16,11 @@ pub mod cpu_state {
         pub fn new(
             joypad: Rc<RefCell<Joypad>>,
             audio_con: Rc<RefCell<AudioController>>,
+            wait_ref: Rc<RefCell<u8>>,
             cartridge: File,
         ) -> Self {
             Self {
-                memory: MemWrap::new(joypad, audio_con, cartridge),
+                memory: MemWrap::new(joypad, audio_con,wait_ref, cartridge),
                 registers: RegStruct::new(),
             }
         }
@@ -109,7 +110,7 @@ pub mod cpu_state {
         pub fn set_r16_memory(&mut self, reg: DoubleReg, val: u16) {
             self.memory.set_memory_16(self.registers.get_r16(reg), val)
         }
-        pub fn get_r16_memory(&mut self, reg: DoubleReg) -> u8 {
+        pub fn get_r16_memory(&mut self,reg: DoubleReg) -> u8 {
             self.memory.grab_memory_8(self.registers.get_r16(reg))
         }
         pub fn get_r16_memory_word(&mut self, reg: DoubleReg) -> u16 {
@@ -177,13 +178,13 @@ pub mod cpu_state {
                 self.set_flag(Flag::Carry, true);
             }
         }
-        pub fn get_half_word(&mut self, addr: u16) -> u16 {
+        pub fn get_half_word(&mut self,addr: u16) -> u16 {
             self.memory.grab_memory_16(addr)
         }
         pub fn set_half_word(&mut self, addr: u16, value: u16) {
             self.memory.set_memory_16(addr, value)
         }
-        pub fn get_graphics(&mut self) -> [[PixelColor; 160]; 144] {
+        pub fn get_graphics(&mut self) -> [[GBColor; 160]; 144] {
             self.memory.get_screen()
         }
     }

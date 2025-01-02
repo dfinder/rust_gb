@@ -5,13 +5,12 @@ pub mod cpu {
     use crate::joypad::joypad::Joypad;
     use crate::registers::registers::*;
     use crate::registers::registers::{self, SingleReg};
-    use crate::screen::ppu::ppu::PixelColor;
+    use crate::screen::ppu::ppu::GBColor;
     use std::cell::RefCell;
     use std::fs::File;
+    use std::ops::Sub;
     use std::rc::Rc;
-    use std::time::Duration;
-    use std::{thread, time};
-    const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
+    //const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
     use crate::interrupt::interrupt::Interrupt;
     pub type CPUFunct = fn(&mut CpuStruct);
     enum InterruptState {
@@ -30,6 +29,7 @@ pub mod cpu {
         extra_waiting: bool,
         ime_flag: InterruptState,
         stopped: bool,
+        clock_cycle_wait: Rc<RefCell<u8>>,
         halted: bool, //Preprocess Option<Operand>
                       //used for mem reads to HL, failed conditional jumps
                       //argument:Argument;
@@ -40,8 +40,9 @@ pub mod cpu {
             audio: Rc<RefCell<AudioController>>,
             cartridge: File,
         ) -> Self {
+            let wait = Rc::new(RefCell::new(0));
             Self {
-                cpu_state: CpuState::new(joypad, audio, cartridge),
+                cpu_state: CpuState::new(joypad, audio, wait.clone(),cartridge),
                 instruction_register: 0x00, //initalize to a noop
                 function_lookup: [
                     //Block 1,
@@ -126,15 +127,16 @@ pub mod cpu {
                 ime_flag: InterruptState::DisableInterrupt, //Interreupt master enable
                 stopped: false,
                 halted: false,
+                clock_cycle_wait:wait
             } //Find a different way of doing this:
               //Break things apart according to our old pipeline model
         }
-        pub fn fetch_graphics(&mut self) -> [[PixelColor; 160]; 144] {
+        pub fn fetch_graphics(&mut self) -> [[GBColor; 160]; 144] {
             self.cpu_state.get_graphics()
         }
-        pub fn interpret_command(&mut self) -> &mut CpuStruct {
+        pub fn interpret_command(&mut self) {
             //function_lookup:&[FunFind;63], cb_lookup:&[FunFind;11]
-            if !self.stopped {
+            if !self.stopped || self.clock_cycle_wait.borrow().gt(&0){
                 //TODO: Fetch is actually the last part of the instruction, so the PC counter is  always one ahead of the actual instruction
                 let current_pc = self.cpu_state.inc_pc();
                 self.instruction_register = self.cpu_state.get_byte(current_pc);
@@ -162,17 +164,19 @@ pub mod cpu {
                 }
                 fun_pointer(self);
                 if self.extra_waiting {
-                    CpuStruct::wait(waiting);
+                    self.wait(waiting);
                 } else {
-                    CpuStruct::wait(cond_waiting);
+                    self.wait(cond_waiting);
                 }; //Evaluate for sanity
             } else {
                 self.handle_interrupts();
-                CpuStruct::wait(1);
+            }
+            let mut current_wait =  self.clock_cycle_wait.borrow_mut();
+            if current_wait.gt(&0){
+                *current_wait=current_wait.sub(1);
             }
             //self.interpret_command(function_lookup, cb_lookup)
             //Manage interrupts
-            return self;
         }
         pub fn cond(&mut self) -> bool {
             self.cpu_state.get_cond(self.instruction_register)
@@ -666,18 +670,19 @@ pub mod cpu {
             }
             fun_pointer(self);
             if self.extra_waiting {
-                CpuStruct::wait(waiting);
+                self.wait(waiting);
             } else {
-                CpuStruct::wait(cond_waiting);
+               self.wait(cond_waiting);
             }; //Evaluate for sanity
             if !taken {
                 panic!("we didn't do anything!")
             }
             //get the next piece of memory, but we use the CB table.
         }
-        pub fn wait(cycles: u8) {
+        pub fn wait(&mut self,cycles: u8) { //We need a way to model this such that we prefix our waits instead of postfixing them.
+            *self.clock_cycle_wait.borrow_mut()+=cycles;
             //4.19 mhz * 4 t cycles
-            thread::sleep(4 * CLOCK_PERIOD * cycles.into());
+            //thread::sleep(4 * CLOCK_PERIOD * cycles.into());
         }
         pub fn handle_interrupts(&mut self) {
             self.ime_flag = match self.ime_flag {
@@ -703,11 +708,11 @@ pub mod cpu {
                         //We check in here so that if we have the case where we're halted, and don't have IME Enabled, we unhalt
                         self.cpu_state.set_byte(0xFF0F, interrupt_flag ^ bit_idx); //unset bit
                         self.ime_flag = InterruptState::Disabled;
-                        let pc = self.cpu_state.get_r16_val(DoubleReg::PC); //CALL
+                        let pc = self.cpu_state.get_r16_val( DoubleReg::PC); //CALL
                         self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
                         self.cpu_state.change_r16(DoubleReg::SP, &|x| x - 2);
                         self.cpu_state.set_pc(target_call);
-                        CpuStruct::wait(5);
+                        self.wait(5);
                     }
                     self.halted = false; //Implement the Halt bug!
                     break;

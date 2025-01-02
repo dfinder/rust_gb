@@ -9,29 +9,28 @@ pub mod interrupt;
 pub mod memory_wrapper;
 pub mod registers;
 pub mod screen;
-use std::{cell::RefCell, fs::File, rc::Rc};
+use std::{cell::RefCell, fs::File, rc::Rc, time::Duration};
 
 use crate::screen::screen::display_screen;
 use audio::audio_controller::AudioController;
-use glium::{self};
 use joypad::joypad::Joypad;
-use sdl2::{self};
-use winit::{event_loop::EventLoop, keyboard::KeyCode};
+use sdl2::{self, event::Event, keyboard::Keycode, pixels::Color};
 fn main() {
     let sdl_context = sdl2::init().unwrap();
-    let event_loop = EventLoop::builder().build().expect("test");
-    let (_window, display) = glium::backend::glutin::SimpleWindowBuilder::new().build(&event_loop);
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem.window("Rust Demo",160,144).position_centered().build().unwrap();
+    let mut canvas = window.into_canvas().build().unwrap();
     let audio_controller = AudioController::new();
-    let cartridge = File::open("~/Mario.gb").expect("msg");
+    let cartridge = File::open("../Mario.gb").expect("msg");
     let mut joypad: Joypad = joypad::joypad::Joypad::new([
-        KeyCode::KeyM,
-        KeyCode::KeyN,
-        KeyCode::KeyZ,
-        KeyCode::KeyX,
-        KeyCode::ArrowDown,
-        KeyCode::ArrowUp,
-        KeyCode::ArrowLeft,
-        KeyCode::ArrowRight,
+        Keycode::M,
+        Keycode::N,
+        Keycode::Z,
+        Keycode::X,
+        Keycode::Down,
+        Keycode::Up,
+        Keycode::Left,
+        Keycode::Right,
     ]);
 
     let my_cpu = &mut cpu::cpu::CpuStruct::new(
@@ -39,30 +38,37 @@ fn main() {
         Rc::new(RefCell::new(audio_controller)),
         cartridge,
     );
-    let _ = event_loop.run(move |event, window_target| {
-        let frame = display.draw();
-        let my_cpu = my_cpu.interpret_command();
+    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    'running: loop {
+        canvas.clear();
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                Event::KeyDown {  keycode, repeat,.. }=>
+                {
+                    joypad.process_keystrokes(my_cpu, keycode, repeat,true);
+                }
+                Event::KeyUp{  keycode,  repeat,.. }=>
+                {
+                    joypad.process_keystrokes(my_cpu, keycode, repeat,false);
+                }
+                _ => {}
+            }
+        }
+        my_cpu.interpret_command();
         let graphics_state = my_cpu.fetch_graphics();
         //let key_strokes:
-        match event {
-            winit::event::Event::WindowEvent { event, .. } => match event {
-                winit::event::WindowEvent::CloseRequested => window_target.exit(),
-                winit::event::WindowEvent::KeyboardInput {
-                    device_id,
-                    event,
-                    is_synthetic,
-                } => {
-                    joypad.process_keystrokes(my_cpu, device_id, event, is_synthetic);
-                }
-                _ => (),
-            },
 
-            _ => (),
-        };
-
-        display_screen(&display, &frame, graphics_state);
-        frame.finish().unwrap();
-    });
+        display_screen( &mut canvas, graphics_state);
+        canvas.present();
+        ::std::thread::sleep(Duration::new(0, 238));
+    }
 }
 
 // Set up window/connectivity with OS

@@ -25,19 +25,19 @@ pub mod mapped_io {
             self.joypad_state = val | 0xF0
         }
     }
-    struct Serial {
-        sb: u8, //Outside of scope :|
-        sc: u8,
-    }
-    impl AsMemory for Serial{
-        fn memory_map(&mut self, _addr: u16) -> u8 {
-            0
-        }
-    
-        fn memory_write(&mut self, _addr: u16, _val: u8) {
-            ()
-        }
-    }
+    //struct Serial {
+    //    sb: u8, //Outside of scope :|
+    //    sc: u8,
+    //}
+    //impl AsMemory for Serial {
+    //   fn memory_map(&mut self, _addr: u16) -> u8 {
+    //        0
+    //    }
+
+    //    fn memory_write(&mut self, _addr: u16, _val: u8) {
+    //        ()
+    //    }
+    //}
     trait AsByte {
         fn read(&mut self) -> u8;
         fn write(&mut self, val: u8);
@@ -113,20 +113,16 @@ pub mod mapped_io {
     pub trait OnClock {
         fn on_clock(&mut self) -> ();
     }
-    struct InterruptFlag {
-        inf: u8,
-    }
     pub struct MappedIO {
         joypad: JoypadMIO, //FF00
-        serial: Serial,    //FF01, FF02 [FF03 is unmapped]
+        //serial: Serial,    //FF01, FF02 [FF03 is unmapped]
         //div, //FF04, increments every clock cycle
         timer: Timer,
         iflag: u8,
         audio_controller: Rc<RefCell<AudioController>>,
         video_controller: Rc<RefCell<VideoController>>,
         boot_control: u8,
-        ie: u8, //LCDControl,
-        interrupt_flag:InterruptFlag,
+        interrupts_enabled: u8, //LCDControl,
     }
 
     impl MappedIO {
@@ -140,7 +136,7 @@ pub mod mapped_io {
                     joypad_state: 0,
                     buttons_ref: joypad_ref,
                 },
-                serial: Serial { sb: 0, sc: 0 },
+                //serial: Serial { sb: 0, sc: 0 },
                 timer: Timer {
                     divider: Divider {
                         internal_divider: 0,
@@ -151,10 +147,9 @@ pub mod mapped_io {
                 },
                 iflag: 0,
                 boot_control: 0,
-                ie: 0,
+                interrupts_enabled: 0, //Interrupts
                 audio_controller: audio_con,
                 video_controller: video_con,
-                interrupt_flag:InterruptFlag{inf:0}
             };
         }
     }
@@ -168,11 +163,11 @@ pub mod mapped_io {
                 0x03 => 0,
                 0x04..=0x07 => self.timer.memory_map(addr - 0x0004),
                 0x0f => 0xE0 | self.iflag,
-                0x10..0x26 => self.audio_controller.borrow_mut().memory_map(addr-0x0010),
-                0x40..=0x4b => self.video_controller.borrow_mut().memory_map(addr-0x0040),
+                0x10..0x26 => self.audio_controller.borrow_mut().memory_map(addr - 0x0010),
+                0x40..=0x4b => self.video_controller.borrow_mut().memory_map(addr - 0x0040),
                 //=>
-                0x50=>self.boot_control,
-                0xff => self.ie,
+                0x50 => self.boot_control,
+                0xff => self.interrupts_enabled,
                 _ => unreachable!(),
             }
         }
@@ -191,9 +186,12 @@ pub mod mapped_io {
                     .borrow_mut()
                     .memory_write(addr - 0x0010, val),
 
-                0x40..=0x4b => self.video_controller.borrow_mut().memory_write(addr-0x0040,val),
-                0x50=>self.boot_control=val,
-                0xff => self.ie=val,
+                0x40..=0x4b => self
+                    .video_controller
+                    .borrow_mut()
+                    .memory_write(addr - 0x0040, val),
+                0x50 => self.boot_control = val,
+                0xff => self.interrupts_enabled = val,
                 _ => unreachable!(),
             }
         }
