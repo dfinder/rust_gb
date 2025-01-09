@@ -3,8 +3,9 @@ pub mod joypad {
     use sdl2::keyboard::Keycode;
  
 
-    use crate::{cpu::cpu::CpuStruct, interrupt::interrupt::Interrupt};
-    #[derive(Clone, Copy)]
+    use crate::cpu::{cpu::CpuStruct, interrupt::interrupt::Interrupt};
+    #[derive(Clone, Copy, Debug
+    )]
     enum GBKey {
         Start,
         Select,
@@ -26,7 +27,6 @@ pub mod joypad {
     pub struct Joypad {
         mapping: [KeyWrapper; 8],
     }
-
     impl Joypad {
         pub fn new(map: [Keycode; 8]) -> Self {
             let start: KeyWrapper = KeyWrapper {
@@ -78,16 +78,16 @@ pub mod joypad {
             &mut self,
             cpu: &mut CpuStruct,
             key_event: Option<Keycode>,
-            repeat: bool,
             orientation: bool,
         ) {
-            if !repeat{
+            //println!("We process a key event {:?}",key_event.unwrap_or(Keycode::KP_000));
                 match key_event{
                     Some(key_press) => {
                         for mut button in self.mapping{
                             if button.p_key==key_press{
                                 button.state = orientation;
                                 if orientation{
+                                    println!("We tell the CPU that there's a processor interrupt for key {:?}",button.v_key);
                                     cpu.interrupt(Interrupt::Input);
                                 }
                             }
@@ -95,7 +95,7 @@ pub mod joypad {
                     },
                     None => ()
                 }
-            }
+            
         }
         pub fn set_key_stroke_nibble(self, current_val: u8) -> u8 {
             let mut initial_index: usize = 0;

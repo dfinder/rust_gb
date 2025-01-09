@@ -1,0 +1,299 @@
+[*] Reg { A: "0", B: "0", C: "11", D: "0", E: "0", F: "[Z:1,N:0,HC:0,C:0]", H: "FF", L: "26", SP: "FFFE", pc: "11" }
+[*] GET_MEMORY_8 ADDR0x11
+[*] IR:3E
+[*] CPU OP: Load IMM16->REG
+[*] Register used is A
+[*] GET_MEMORY_8 ADDR0x12
+[*] Reg { A: "80", B: "0", C: "11", D: "0", E: "0", F: "[Z:1,N:0,HC:0,C:0]", H: "FF", L: "26", SP: "FFFE", pc: "13" }
+[*] GET_MEMORY_8 ADDR0x13
+[*] IR:32
+[*] CPU OP: Store ACC->Mem
+[*] ADDR FF25
+[*] Reg { A: "80", B: "0", C: "11", D: "0", E: "0", F: "[Z:1,N:0,HC:0,C:0]", H: "FF", L: "25", SP: "FFFE", pc: "14" }
+[*] GET_MEMORY_8 ADDR0x14
+[*] IR:E2
+[*] CPU OP: Store ACC->[C+0xFF00]
+[*] Reg { A: "80", B: "0", C: "11", D: "0", E: "0", F: "[Z:1,N:0,HC:0,C:0]", H: "FF", L: "25", SP: "FFFE", pc: "15" }
+[*] GET_MEMORY_8 ADDR0x15
+[*] IR:C
+[*] CPU OP:INC R8
+[*] Register used is C
+[*] Reg { A: "80", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "25", SP: "FFFE", pc: "16" }
+[*] GET_MEMORY_8 ADDR0x16
+[*] IR:3E
+[*] CPU OP: Load IMM16->REG
+[*] Register used is A
+[*] GET_MEMORY_8 ADDR0x17
+[*] Reg { A: "F3", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "25", SP: "FFFE", pc: "18" }
+[*] GET_MEMORY_8 ADDR0x18
+[*] IR:E2
+[*] CPU OP: Store ACC->[C+0xFF00]
+[*] Reg { A: "F3", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "25", SP: "FFFE", pc: "19" }
+[*] GET_MEMORY_8 ADDR0x19
+[*] IR:32
+[*] CPU OP: Store ACC->Mem
+[*] ADDR FF24
+[*] Reg { A: "F3", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "1A" }
+[*] GET_MEMORY_8 ADDR0x1a
+[*] IR:3E
+[*] CPU OP: Load IMM16->REG
+[*] Register used is A
+[*] GET_MEMORY_8 ADDR0x1b
+[*] Reg { A: "77", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "1C" }
+[*] GET_MEMORY_8 ADDR0x1c
+[*] IR:77
+[*] Register used is Memptr
+[*] Register used is A
+[*] CPU OP: Load A->Memptr
+[*] Reg { A: "77", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "1D" }
+[*] GET_MEMORY_8 ADDR0x1d
+[*] IR:3E
+[*] CPU OP: Load IMM16->REG
+[*] Register used is A
+[*] GET_MEMORY_8 ADDR0x1e
+[*] Reg { A: "FC", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "1F" }
+[*] GET_MEMORY_8 ADDR0x1f
+[*] IR:E0
+[*] CPU OP: Store ACC->[IMM8+0xFF00]
+[*] GET_MEMORY_8 ADDR0x20
+[*] Reg { A: "FC", B: "0", C: "12", D: "0", E: "0", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "21" }
+[*] GET_MEMORY_8 ADDR0x21
+[*] IR:11
+[*] CPU Operation is Load: MM16->2REG
+[*] Table Register used is DE
+[*] GET_MEMORY_16 ADDR0x22
+[*] Reg { A: "FC", B: "0", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "FF", L: "24", SP: "FFFE", pc: "24" }
+[*] GET_MEMORY_8 ADDR0x24
+[*] IR:21
+[*] CPU Operation is Load: MM16->2REG
+[*] Table Register used is HL
+[*] GET_MEMORY_16 ADDR0x25
+[*] Reg { A: "FC", B: "0", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFE", pc: "27" }
+[*] GET_MEMORY_8 ADDR0x27
+[*] IR:1A
+[*] CPU OP: Load acc->addr
+[*] Table Register used is DE
+[*] GET_MEMORY_8 ADDR0x104
+[*] Reg { A: "64", B: "0", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFE", pc: "28" }
+[*] GET_MEMORY_8 ADDR0x28
+[*] IR:CD
+[*] CPU OP: Call
+[*] GET_MEMORY_16 ADDR0x29
+[*] Reg { A: "64", B: "0", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "96" }
+[*] GET_MEMORY_8 ADDR0x96
+[*] IR:6
+[*] CPU OP: Load IMM16->REG
+[*] Register used is B
+[*] GET_MEMORY_8 ADDR0x97
+[*] Reg { A: "64", B: "4", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "98" }
+[*] GET_MEMORY_8 ADDR0x98
+[*] IR:C5
+[*] CPU OP: PUSH
+[*] Table Register used is BC
+[*] Reg { A: "64", B: "4", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "99" }
+[*] GET_MEMORY_8 ADDR0x99
+[*] IR:CB
+[*] Reg { A: "64", B: "4", C: "12", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9A" }
+[*] GET_MEMORY_8 ADDR0x9a
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 18
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "64", B: "4", C: "24", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9B" }
+[*] GET_MEMORY_8 ADDR0x9b
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 100
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "C8", B: "4", C: "24", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9C" }
+[*] GET_MEMORY_8 ADDR0x9c
+[*] IR:C1
+[*] CPU OP: POP
+[*] Table Register used is BC
+[*] GET_MEMORY_16 ADDR0xfffa
+[*] Reg { A: "C8", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9D" }
+[*] GET_MEMORY_8 ADDR0x9d
+[*] IR:CB
+[*] Reg { A: "C8", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9E" }
+[*] GET_MEMORY_8 ADDR0x9e
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "C8", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9F" }
+[*] GET_MEMORY_8 ADDR0x9f
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 200
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "90", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A0" }
+[*] GET_MEMORY_8 ADDR0xa0
+[*] IR:5
+[*] CPU OP:DEC R8
+[*] Register used is B
+[*] Reg { A: "90", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A1" }
+[*] GET_MEMORY_8 ADDR0xa1
+[*] IR:20
+[*] CPU OP: Jump Conditional Relative
+[*] WE'RE ASSESSING CONDITION 2 
+[*] CPU OP: Jump Relative
+[*] GET_MEMORY_8 ADDR0xa2
+[*] Reg { A: "90", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "98" }
+[*] GET_MEMORY_8 ADDR0x98
+[*] IR:C5
+[*] CPU OP: PUSH
+[*] Table Register used is BC
+[*] Reg { A: "90", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "99" }
+[*] GET_MEMORY_8 ADDR0x99
+[*] IR:CB
+[*] Reg { A: "90", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9A" }
+[*] GET_MEMORY_8 ADDR0x9a
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "90", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9B" }
+[*] GET_MEMORY_8 ADDR0x9b
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 144
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "20", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9C" }
+[*] GET_MEMORY_8 ADDR0x9c
+[*] IR:C1
+[*] CPU OP: POP
+[*] Table Register used is BC
+[*] GET_MEMORY_16 ADDR0xfffa
+[*] Reg { A: "20", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9D" }
+[*] GET_MEMORY_8 ADDR0x9d
+[*] IR:CB
+[*] Reg { A: "20", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9E" }
+[*] GET_MEMORY_8 ADDR0x9e
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "20", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9F" }
+[*] GET_MEMORY_8 ADDR0x9f
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 32
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "40", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A0" }
+[*] GET_MEMORY_8 ADDR0xa0
+[*] IR:5
+[*] CPU OP:DEC R8
+[*] Register used is B
+[*] Reg { A: "40", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A1" }
+[*] GET_MEMORY_8 ADDR0xa1
+[*] IR:20
+[*] CPU OP: Jump Conditional Relative
+[*] WE'RE ASSESSING CONDITION 2 
+[*] CPU OP: Jump Relative
+[*] GET_MEMORY_8 ADDR0xa2
+[*] Reg { A: "40", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "98" }
+[*] GET_MEMORY_8 ADDR0x98
+[*] IR:C5
+[*] CPU OP: PUSH
+[*] Table Register used is BC
+[*] Reg { A: "40", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "99" }
+[*] GET_MEMORY_8 ADDR0x99
+[*] IR:CB
+[*] Reg { A: "40", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9A" }
+[*] GET_MEMORY_8 ADDR0x9a
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "40", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9B" }
+[*] GET_MEMORY_8 ADDR0x9b
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 64
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "80", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9C" }
+[*] GET_MEMORY_8 ADDR0x9c
+[*] IR:C1
+[*] CPU OP: POP
+[*] Table Register used is BC
+[*] GET_MEMORY_16 ADDR0xfffa
+[*] Reg { A: "80", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9D" }
+[*] GET_MEMORY_8 ADDR0x9d
+[*] IR:CB
+[*] Reg { A: "80", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9E" }
+[*] GET_MEMORY_8 ADDR0x9e
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "80", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "9F" }
+[*] GET_MEMORY_8 ADDR0x9f
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 128
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "0", B: "0", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A0" }
+[*] GET_MEMORY_8 ADDR0xa0
+[*] IR:5
+[*] CPU OP:DEC R8
+[*] Register used is B
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "A1" }
+[*] GET_MEMORY_8 ADDR0xa1
+[*] IR:20
+[*] CPU OP: Jump Conditional Relative
+[*] WE'RE ASSESSING CONDITION 2 
+[*] CPU OP: Jump Relative
+[*] GET_MEMORY_8 ADDR0xa2
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFC", pc: "98" }
+[*] GET_MEMORY_8 ADDR0x98
+[*] IR:C5
+[*] CPU OP: PUSH
+[*] Table Register used is BC
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "99" }
+[*] GET_MEMORY_8 ADDR0x99
+[*] IR:CB
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9A" }
+[*] GET_MEMORY_8 ADDR0x9a
+[*] IR:11
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is C
+[*] ALU register output 0
+[*] Register used is C
+[*] ALU Register is:C
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9B" }
+[*] GET_MEMORY_8 ADDR0x9b
+[*] IR:17
+[*] CPU Operation is Rotate Left without Carry
+[*] Register used is A
+[*] ALU register output 0
+[*] Register used is A
+[*] ALU Register is:A
+[*] Reg { A: "0", B: "FF", C: "0", D: "1", E: "4", F: "[Z:0,N:0,HC:0,C:0]", H: "80", L: "10", SP: "FFFA", pc: "9C" }
+[*] GET_MEMORY_8 ADDR0x9c
+[*] IR:C1
+[*] CPU OP: POP
+[*] Table Register used is BC
+[*] GET_MEMORY_16 ADDR0xfffa

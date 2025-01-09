@@ -1,26 +1,30 @@
-use crate::registers::registers::*;
 pub mod cpu_state {
     use std::{cell::RefCell, fs::File, rc::Rc};
 
-    use super::{DoubleReg, Flag, RegStruct, SingleReg};
+    use log::info;
+    use sdl2::{render::Canvas, video::Window};
+
     use crate::{
-        audio::audio_controller::AudioController, joypad::joypad::Joypad,
-        memory_wrapper::memory_wrapper::MemWrap, screen::ppu::ppu::GBColor,
+        audio::audio_controller::AudioController,
+        cpu::registers::registers::{DoubleReg, Flag, RegStruct, SingleReg},
+        joypad::joypad::Joypad,
+        memory::memory_wrapper::MemWrap,
     };
 
     pub struct CpuState {
         memory: MemWrap,
-        registers: RegStruct,
+        pub registers: RegStruct,
     }
     impl CpuState {
         pub fn new(
             joypad: Rc<RefCell<Joypad>>,
-            audio_con: Rc<RefCell<AudioController>>,
+            audio_con: AudioController,
             wait_ref: Rc<RefCell<u8>>,
+            canvas: Canvas<Window>,
             cartridge: File,
         ) -> Self {
             Self {
-                memory: MemWrap::new(joypad, audio_con,wait_ref, cartridge),
+                memory: MemWrap::new(joypad, audio_con, canvas, wait_ref, cartridge),
                 registers: RegStruct::new(),
             }
         }
@@ -29,7 +33,7 @@ pub mod cpu_state {
             self.get_r8_end(opcode >> 3)
         }
         pub fn get_r8_end(&mut self, opcode: u8) -> SingleReg {
-            match opcode % 8 {
+            let ret = match opcode % 8 {
                 0 => SingleReg::B,
                 1 => SingleReg::C,
                 2 => SingleReg::D,
@@ -39,25 +43,31 @@ pub mod cpu_state {
                 6 => SingleReg::Memptr,
                 7 => SingleReg::A,
                 _ => unreachable!(),
-            }
+            };
+            //info!("Register used is {:?}", ret);
+            ret
         }
         pub fn r16_tbl(&mut self, opcode: u8) -> DoubleReg {
-            match (opcode >> 4) % 4 {
+            let ret = match (opcode >> 4) % 4 {
                 0 => DoubleReg::BC,
                 1 => DoubleReg::DE,
                 2 => DoubleReg::HL,
                 3 => DoubleReg::SP,
                 _ => unreachable!(),
-            }
+            };
+            //info!("Table Register used is {:?}", ret);
+            ret
         }
         pub fn r16_stk_tbl(&mut self, opcode: u8) -> DoubleReg {
-            match (opcode >> 4) % 4 {
+            let ret =match (opcode >> 4) % 4 {
                 0 => DoubleReg::BC,
                 1 => DoubleReg::DE,
                 2 => DoubleReg::HL,
                 3 => DoubleReg::AF,
                 _ => unreachable!(),
-            }
+            };
+            //info!("Table Register used is {:?}", ret);
+            ret
         }
         pub fn r16_mem_tbl(&mut self, opcode: u8) -> DoubleReg {
             match (opcode >> 4) % 4 {
@@ -70,6 +80,10 @@ pub mod cpu_state {
         }
         pub fn inc_pc(&mut self) -> u16 {
             self.registers.inc_pc(1)
+        }
+
+        pub fn get_pc(&mut self) -> u16 {
+            self.registers.get_r16(DoubleReg::PC)
         }
         pub fn get_acc(&mut self) -> u8 {
             self.registers.get_r8(SingleReg::A, &mut self.memory)
@@ -110,16 +124,12 @@ pub mod cpu_state {
         pub fn set_r16_memory(&mut self, reg: DoubleReg, val: u16) {
             self.memory.set_memory_16(self.registers.get_r16(reg), val)
         }
-        pub fn get_r16_memory(&mut self,reg: DoubleReg) -> u8 {
+        pub fn get_r16_memory(&mut self, reg: DoubleReg) -> u8 {
             self.memory.grab_memory_8(self.registers.get_r16(reg))
         }
         pub fn get_r16_memory_word(&mut self, reg: DoubleReg) -> u16 {
             self.memory.grab_memory_16(self.registers.get_r16(reg))
         }
-        /*pub fn get_reg_val(&mut self,opcode:u8)->u8 {
-            let reg = self.get_r8_end(opcode);
-            self.get_r8_val(reg)
-        }*/
         pub fn get_flag(&mut self, flag: Flag) -> bool {
             let flag_reg = self.registers.get_r8(SingleReg::F, &mut self.memory);
             match flag {
@@ -161,7 +171,8 @@ pub mod cpu_state {
             return ret;
         }
         pub fn get_cond(&mut self, opcode: u8) -> bool {
-            match (opcode >> 4) % 4 {
+            //info!("WE'RE ASSESSING CONDITION {:?} ", (opcode >> 4) % 4);
+            match (opcode >> 3) % 4 {
                 0 => !self.get_flag(Flag::Zero),
                 1 => self.get_flag(Flag::Zero),
                 2 => !self.get_flag(Flag::Carry),
@@ -178,14 +189,14 @@ pub mod cpu_state {
                 self.set_flag(Flag::Carry, true);
             }
         }
-        pub fn get_half_word(&mut self,addr: u16) -> u16 {
+        pub fn get_half_word(&mut self, addr: u16) -> u16 {
             self.memory.grab_memory_16(addr)
         }
         pub fn set_half_word(&mut self, addr: u16, value: u16) {
             self.memory.set_memory_16(addr, value)
         }
-        pub fn get_graphics(&mut self) -> [[GBColor; 160]; 144] {
-            self.memory.get_screen()
+        pub fn on_clock(&mut self) {
+            self.memory.on_clock();
         }
     }
 }

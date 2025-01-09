@@ -1,5 +1,7 @@
 pub mod video_controller {
-    use crate::memory_wrapper::memory_wrapper::AsMemory;
+    use log::info;
+
+    use crate::memory::memory_wrapper::AsMemory;
     #[derive(Clone, Copy)]
     pub struct VideoController {
         pub lcdc: u8, //LCD Control
@@ -19,11 +21,11 @@ pub mod video_controller {
         //Remember
         fn memory_map(&mut self, addr: u16) -> u8 {
             match addr {
-                0 => self.lcdc, //LCD control register, controls which banks are used, whether windows/background is used, etc. 
+                0 => self.lcdc, //LCD control register, controls which banks are used, whether windows/background is used, etc.
                 1 => self.stat, //Interrupts
-                2 => self.scy, //Background viewport Y
+                2 => self.scy,  //Background viewport Y
                 3 => self.scx,  //Background viewport X
-                4 => self.ly,   //Line of drawing
+                4 => self.ly,   //Line of drawinginfo!("LY IS {:X?}"
                 5 => self.lyc,  //Line to compare
                 6 => self.dma,  //DMA!
                 7 => self.bgp,  //Background Pallete Data
@@ -38,10 +40,10 @@ pub mod video_controller {
         fn memory_write(&mut self, addr: u16, val: u8) {
             match addr {
                 0 => self.lcdc = val,
-                1 => self.stat = val&0xFB,
-                2 => self.scy = val,    //Background Viewport Y
+                1 => self.stat = val & 0xFB, //Last two bits are unwritable
+                2 => self.scy = val,  //Background Viewport Y
                 3 => self.scx = val,  //Background viewport X
-                4 => (),   //Line of drawing, is READ ONLY
+                4 => (),              //Line of drawing, is READ ONLY
                 5 => self.lyc = val,  //Line to compare
                 6 => self.dma = val,  //DMA! Controls a fun bypass between RAM and VRAM
                 7 => self.bgp = val,  //Background Pallette Data

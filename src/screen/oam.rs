@@ -1,6 +1,6 @@
 pub mod oam {
 
-    use crate::memory_wrapper::memory_wrapper::AsMemory;
+    use crate::memory::memory_wrapper::AsMemory;
     pub struct OamStruct {
         pub oam_list: [Oam; 40],
     }

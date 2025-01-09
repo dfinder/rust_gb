@@ -3,26 +3,28 @@ pub mod joypad;
 pub mod audio;
 pub mod cartridge;
 pub mod cpu;
-pub mod cpu_state;
-pub mod function_table;
-pub mod interrupt;
-pub mod memory_wrapper;
-pub mod registers;
+pub mod memory;
 pub mod screen;
-use std::{cell::RefCell, fs::File, rc::Rc, time::Duration};
+use std::{cell::RefCell, cmp::max, fs::File, rc::Rc, thread, time::Duration};
 
-use crate::screen::screen::display_screen;
 use audio::audio_controller::AudioController;
+use cpu::cpu::CpuStruct;
 use joypad::joypad::Joypad;
 use sdl2::{self, event::Event, keyboard::Keycode, pixels::Color};
+use colog;
+use sdl2_sys::KeyCode;
 fn main() {
+
+    //let mut clog = colog::default_builder();
+    colog::init();
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("Rust Demo",160,144).position_centered().build().unwrap();
+    let audio_subsystem = sdl_context.audio().unwrap();
+    let window = video_subsystem.window("Gameboy",160,144).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
-    let audio_controller = AudioController::new();
+    let gb_audio = AudioController::new(audio_subsystem);
     let cartridge = File::open("../Mario.gb").expect("msg");
-    let mut joypad: Joypad = joypad::joypad::Joypad::new([
+    let mut joypad: Joypad = Joypad::new([
         Keycode::M,
         Keycode::N,
         Keycode::Z,
@@ -32,42 +34,49 @@ fn main() {
         Keycode::Left,
         Keycode::Right,
     ]);
-
-    let my_cpu = &mut cpu::cpu::CpuStruct::new(
-        Rc::new(RefCell::new(joypad)),
-        Rc::new(RefCell::new(audio_controller)),
+    let wrapped_joypad = Rc::new(RefCell::new(joypad));
+    canvas.clear();
+    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.present();
+    let my_cpu = &mut CpuStruct::new(
+        wrapped_joypad.clone(),
+        gb_audio,
+        canvas,
         cartridge,
     );
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
+    let mut clockrate = 1;
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
-        canvas.clear();
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
-                Event::KeyDown {  keycode, repeat,.. }=>
-                {
-                    joypad.process_keystrokes(my_cpu, keycode, repeat,true);
+                Event::KeyDown{keycode:Some(Keycode::Comma),..}=>{
+                    clockrate = clockrate <<1 
+                
                 }
-                Event::KeyUp{  keycode,  repeat,.. }=>
+                Event::KeyDown{keycode:Some(Keycode::Period),..}=>{
+                    clockrate = max(clockrate >>1,1)
+                }
+                Event::KeyDown {  keycode, repeat:false,.. }=>
                 {
-                    joypad.process_keystrokes(my_cpu, keycode, repeat,false);
+                    joypad.process_keystrokes(my_cpu, keycode,true);
+                    
+                }
+                Event::KeyUp{  keycode,  repeat:false,.. }=>
+                {
+                    joypad.process_keystrokes(my_cpu, keycode, false);
                 }
                 _ => {}
             }
         }
         my_cpu.interpret_command();
-        let graphics_state = my_cpu.fetch_graphics();
+        thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
+        //println!("{:?}", graphics_state);
         //let key_strokes:
 
-        display_screen( &mut canvas, graphics_state);
-        canvas.present();
-        ::std::thread::sleep(Duration::new(0, 238));
     }
 }
 

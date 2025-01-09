@@ -4,7 +4,8 @@ pub mod mapped_io {
 
     use crate::{
         audio::audio_controller::AudioController, joypad::joypad::Joypad,
-        memory_wrapper::memory_wrapper::AsMemory, screen::video_controller::video_controller::VideoController,
+        memory::memory_wrapper::AsMemory,
+        screen::video_controller::video_controller::VideoController,
     };
 
     struct JoypadMIO {
@@ -12,7 +13,7 @@ pub mod mapped_io {
         buttons_ref: Rc<RefCell<Joypad>>,
     }
     impl AsByte for JoypadMIO {
-        //Consider merging these concepts.
+        //Consider merging joypad with joypadMIO
         fn read(&mut self) -> u8 {
             self.joypad_state = self
                 .buttons_ref
@@ -47,7 +48,7 @@ pub mod mapped_io {
     }
     impl AsByte for Divider {
         fn read(&mut self) -> u8 {
-            return ((self.internal_divider & 0xF0) >> 8) as u8;
+            return ((self.internal_divider & 0xFF00) >> 8) as u8;
         }
         fn write(&mut self, _: u8) {
             self.internal_divider = 0;
@@ -55,7 +56,7 @@ pub mod mapped_io {
     }
     impl OnClock for Divider {
         fn on_clock(&mut self) {
-            self.internal_divider += 1;
+            self.internal_divider=self.internal_divider.wrapping_add(1);
         }
     }
     struct Timer {
@@ -78,9 +79,9 @@ pub mod mapped_io {
         fn memory_write(&mut self, addr: u16, val: u8) {
             match addr {
                 0 => self.divider.write(val),
-                1 => todo!(),
-                2 => todo!(),
-                3 => todo!(),
+                1 => self.tima= val,
+                2 => self.tma = val,
+                3 => self.tac=val,
                 _ => unreachable!(),
             }
         }
@@ -90,7 +91,7 @@ pub mod mapped_io {
         fn on_clock(&mut self) {
             //Timer control
             self.timer.divider.on_clock();
-            let frequency = match self.timer.tac & 0x03 {
+            let frequency = match self.timer.tac %4  {
                 0 => 8, //Every 256 m cycles
                 1 => 2, //4 M cycles
                 2 => 4, //16 m cycles
@@ -108,7 +109,9 @@ pub mod mapped_io {
                     self.iflag |= 0x04;
                 }
             }
+            self.audio_controller.handle_audio(self.timer.divider.internal_divider);
         }
+
     }
     pub trait OnClock {
         fn on_clock(&mut self) -> ();
@@ -116,19 +119,18 @@ pub mod mapped_io {
     pub struct MappedIO {
         joypad: JoypadMIO, //FF00
         //serial: Serial,    //FF01, FF02 [FF03 is unmapped]
-        //div, //FF04, increments every clock cycle
         timer: Timer,
         iflag: u8,
-        audio_controller: Rc<RefCell<AudioController>>,
+        audio_controller: AudioController,
         video_controller: Rc<RefCell<VideoController>>,
-        boot_control: u8,
+        pub boot_control: u8,
         interrupts_enabled: u8, //LCDControl,
     }
 
     impl MappedIO {
         pub fn new(
             joypad_ref: Rc<RefCell<Joypad>>,
-            audio_con: Rc<RefCell<AudioController>>,
+            audio_con: AudioController,
             video_con: Rc<RefCell<VideoController>>,
         ) -> Self {
             return Self {
@@ -163,10 +165,10 @@ pub mod mapped_io {
                 0x03 => 0,
                 0x04..=0x07 => self.timer.memory_map(addr - 0x0004),
                 0x0f => 0xE0 | self.iflag,
-                0x10..0x26 => self.audio_controller.borrow_mut().memory_map(addr - 0x0010),
+                0x10..0x26 => self.audio_controller.memory_map(addr - 0x0010),
                 0x40..=0x4b => self.video_controller.borrow_mut().memory_map(addr - 0x0040),
                 //=>
-                0x50 => self.boot_control,
+                0x50 => self.boot_control % 2,
                 0xff => self.interrupts_enabled,
                 _ => unreachable!(),
             }
@@ -183,14 +185,13 @@ pub mod mapped_io {
                 0x000f => self.iflag = 0xE0 | val,
                 0x0010..=0x003f => self
                     .audio_controller
-                    .borrow_mut()
                     .memory_write(addr - 0x0010, val),
 
                 0x40..=0x4b => self
                     .video_controller
                     .borrow_mut()
                     .memory_write(addr - 0x0040, val),
-                0x50 => self.boot_control = val,
+                0x50 => self.boot_control = 0x01,
                 0xff => self.interrupts_enabled = val,
                 _ => unreachable!(),
             }

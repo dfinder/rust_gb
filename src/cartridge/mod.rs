@@ -10,7 +10,7 @@ mod mmm01;
 pub mod cartridge {
     use std::{fs::File, io::Read};
 
-    use crate::memory_wrapper::memory_wrapper::AsMemory;
+    use crate::memory::memory_wrapper::AsMemory;
 
     use super::{
         mbc::mbc::Mbc, mbc0::mbc0::Mbc0, mbc1::mbc1::Mbc1, mbc2::mbc2::Mbc2, mbc3::mbc3::Mbc3,
@@ -31,6 +31,7 @@ pub mod cartridge {
             let mut cart_contents: Vec<u8> = Vec::<u8>::new();
             cart.read_to_end(&mut cart_contents)
                 .expect("cart not found");
+            //println!("CARTRIDGE FOUND {:?}",cart_contents[0x0147] );
             return match cart_contents[0x0147] {
                 0x00 => Cartridge::Mbc0(Mbc0::new(cart_contents)),
                 0x01 => Cartridge::Mbc1(Mbc1::new(cart_contents)),
@@ -62,10 +63,11 @@ pub mod cartridge {
                 0xff => todo!(), //huc1
                 _ => unreachable!(),
             };
-        }
+        }   
     }
     impl AsMemory for Cartridge {
         fn memory_map(&mut self, addr: u16) -> u8 {
+            
             if addr > 0xA000 {
                 return match self {
                     Cartridge::Mbc0(mem) => mem.ram_read(addr - 0xA000),

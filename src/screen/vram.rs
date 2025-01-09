@@ -1,6 +1,6 @@
 pub mod vram {
 
-    use crate::{memory_wrapper::memory_wrapper::AsMemory, screen::ppu::ppu::ColorID};
+    use crate::{memory::memory_wrapper::AsMemory, screen::screen::ColorID};
 
     #[repr(packed)]
     pub struct Vram {
@@ -10,13 +10,12 @@ pub mod vram {
         pub tmap1: TileMap, //9800->9BFF
         pub tmap2: TileMap, //9C00->9FFF
     }
-    pub type Tile= [[ColorID;8];8];
-    
-    pub fn empty_tile() -> Tile{
-        return [[ColorID::Unset;8];8]
+    pub type Tile = [[ColorID; 8]; 8];
+
+    pub fn empty_tile() -> Tile {
+        return [[ColorID::Unset; 8]; 8];
     }
-   
-   
+
     impl Vram {
         pub fn new() -> Self {
             return Vram {
@@ -52,7 +51,7 @@ pub mod vram {
         }
     }
     pub struct TileMap {
-        pub tiles: [[u8; 32]; 32],
+        pub tiles: [[u8; 32]; 32], //I AM AN ORDERED STRUCTURE THAT REPRESENTS A MAPPING TO A BACKGROUND
     }
     impl TileMap {
         pub fn new() -> Self {
@@ -67,10 +66,11 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
-            self.tiles[(addr << 5) as usize][(addr % 32) as usize] = val
+            self.tiles[(addr >> 5) as usize][(addr % 32) as usize] = val
         }
     }
     pub struct Block {
+        //I AM A BANK THAT HOLDS AN ENTIRE BACKGROUND
         pub objects: [Vobj; 128],
     }
     impl Block {
@@ -92,6 +92,7 @@ pub mod vram {
 
     #[derive(Copy, Clone)]
     pub struct Vobj {
+        //I AM A 8x8 SET OF PIXELS
         //2BPP Format!
         data: [u8; 16],
     }
@@ -106,34 +107,34 @@ pub mod vram {
     }
     impl Vobj {
         fn new() -> Self {
-            return Vobj { data: [0; 16] };
+            return Vobj { data: [0; 16] }; //I AM A SET OF 8 PIXELS BEFORE PROCESSING
         }
-        fn interleave_with_zeros(&mut self, a: u8) -> u16 {
+        fn interleave_with_zeros(a: u8) -> u16 {
             let mut ret: u16 = a as u16;
             ret = (ret ^ (ret << 4)) & 0x0f0f; //0000111100001111
             ret = (ret ^ (ret << 2)) & 0x3333; //0011001100110011
             (ret ^ (ret << 1)) & 0x5555 //0101010101010101
         }
-        fn interleave(&mut self, a: u8, b: u8) -> u16 {
-            (self.interleave_with_zeros(b) << 1) | self.interleave_with_zeros(a)
+        fn interleave(&self, a: u8, b: u8) -> u16 {
+            (Self::interleave_with_zeros(b) << 1) | Self::interleave_with_zeros(a)
         }
-        pub fn get_tile(&mut self) -> Tile{
+        pub fn get_tile(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
                 ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
             }
-            return ret.map(|x|Self::color_palette(x))
+            return ret.map(|x| Self::color_palette(x));
         }
-        pub fn get_tile_backwards(&mut self) -> Tile{
+        pub fn get_tile_backwards(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
                 ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
             }
-            let mut ret_tile = ret.map(|x|Self::color_palette_reverse(x));
+            let mut ret_tile = ret.map(|x| Self::color_palette_reverse(x));
             ret_tile.reverse();
-            return ret_tile
+            return ret_tile;
         }
-        pub fn color_palette(color:u16)->[ColorID;8]{
+        pub fn color_palette(color: u16) -> [ColorID; 8] {
             let mut ret = [ColorID::Unset; 8];
             let mut loc_color = color;
             for i in 0..8 {
@@ -149,7 +150,7 @@ pub mod vram {
             }
             ret
         }
-        pub fn color_palette_reverse(color:u16)->[ColorID;8]{
+        pub fn color_palette_reverse(color: u16) -> [ColorID; 8] {
             let mut ret = [ColorID::Unset; 8];
             let mut loc_color = color;
             for i in 0..8 {
