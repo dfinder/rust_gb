@@ -1,5 +1,9 @@
 pub mod oam {
 
+    use std::{thread, time::Duration};
+
+    use log::info;
+
     use crate::memory::memory_wrapper::AsMemory;
     pub struct OamStruct {
         pub oam_list: [Oam; 40],
@@ -17,7 +21,7 @@ pub mod oam {
         }
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Oam {
         pub ypos: u8,
         pub xpos: u8,
@@ -26,6 +30,8 @@ pub mod oam {
     }
     impl AsMemory for Oam {
         fn memory_map(&mut self, addr: u16) -> u8 {
+            //info!("{:?}", &self);
+            //thread::sleep(Duration::from_secs(1));
             match addr {
                 0x0000 => self.ypos,
                 0x0001 => self.xpos,
@@ -36,6 +42,8 @@ pub mod oam {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            //info!("{:?}", &self);
+            //thread::sleep(Duration::from_secs(1));
             match addr {
                 0x0000 => self.ypos = val,
                 0x0001 => self.xpos = val,
@@ -52,6 +60,9 @@ pub mod oam {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            info!("HEY WE MAKE IT TO WRITING THE OAM STRUCT");
+
+            (Duration::from_secs(10));
             self.oam_list[(addr >> 2) as usize].memory_write(addr & 0x0003, val)
         }
     }

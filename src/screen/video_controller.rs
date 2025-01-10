@@ -1,8 +1,9 @@
 pub mod video_controller {
-    use log::info;
-
     use crate::memory::memory_wrapper::AsMemory;
+    use log::info;
+    use std::fmt::Debug;
     #[derive(Clone, Copy)]
+
     pub struct VideoController {
         pub lcdc: u8, //LCD Control
         pub stat: u8, //Interrupts
@@ -16,6 +17,24 @@ pub mod video_controller {
         pub obp1: u8, //Object palette 2
         pub wy: u8,   //Window Y
         pub wx: u8,   //Window X
+    }
+    impl Debug for VideoController {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("VideoController")
+                .field("lcdc", &format!("{:X?}", &self.lcdc))
+                .field("stat", &format!("{:X?}", &self.stat))
+                .field("scy", &format!("{:X?}", &self.scy))
+                .field("scx", &format!("{:X?}", &self.scx))
+                .field("ly", &format!("{:X?}", &self.ly))
+                .field("lyc", &format!("{:X?}", &self.lyc))
+                .field("dma", &format!("{:X?}", &self.dma))
+                .field("bgp", &format!("{:X?}", &self.bgp))
+                .field("obp0", &format!("{:X?}", &self.obp0))
+                .field("obp1", &format!("{:X?}", &self.obp1))
+                .field("wy", &format!("{:X?}", &self.wy))
+                .field("wx", &format!("{:X?}", &self.wx))
+                .finish()
+        }
     }
     impl AsMemory for VideoController {
         //Remember
@@ -41,16 +60,19 @@ pub mod video_controller {
             match addr {
                 0 => self.lcdc = val,
                 1 => self.stat = val & 0xFB, //Last two bits are unwritable
-                2 => self.scy = val,  //Background Viewport Y
-                3 => self.scx = val,  //Background viewport X
-                4 => (),              //Line of drawing, is READ ONLY
-                5 => self.lyc = val,  //Line to compare
-                6 => self.dma = val,  //DMA! Controls a fun bypass between RAM and VRAM
-                7 => self.bgp = val,  //Background Pallette Data
-                8 => self.obp0 = val, //Object palette 1
-                9 => self.obp1 = val, //Object palette 2
-                0xa => self.wy = val, //Window Y
-                0xb => self.wx = val, //Window X
+                2 => {
+                    self.scy = val;
+                    //info!("WE SET SCY{:?}", val)
+                } //Background Viewport Y
+                3 => self.scx = val,         //Background viewport X
+                4 => (),                     //Line of drawing, is READ ONLY
+                5 => self.lyc = val,         //Line to compare
+                6 => self.dma = val,         //DMA! Controls a fun bypass between RAM and VRAM
+                7 => self.bgp = val,         //Background Pallette Data
+                8 => self.obp0 = val,        //Object palette 1
+                9 => self.obp1 = val,        //Object palette 2
+                0xa => self.wy = val,        //Window Y
+                0xb => self.wx = val,        //Window X
                 _ => unreachable!(),
             }
         }

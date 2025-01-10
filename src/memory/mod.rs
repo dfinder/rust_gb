@@ -80,6 +80,10 @@ pub mod memory_wrapper {
                         addr_l: 0,
                     }; //We, of course, cannot start a DMA transfer while one is ongoing
                 }
+                if (0x8000..=0x97FF).contains(&addr){
+                    info!("WE WRITE TO BLOCKS  {:X?} @ {:X?} ", val, &addr)
+
+                }
                 match addr {
                     0x0000..=0x7FFF => self.cart.memory_write(addr, val), //ROM
                     0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val), //VRAM
@@ -114,7 +118,7 @@ pub mod memory_wrapper {
                 scy: 0,
                 wx: 0,
                 wy: 0,
-                stat: 0,
+                stat: 0x02,
             }));
             let mut boot_rom = [0 as u8; 0xff];
             let filename = "./src/memory/DMG_ROM.bin";

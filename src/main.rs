@@ -44,7 +44,7 @@ fn main() {
         canvas,
         cartridge,
     );
-    let mut clockrate = 1;
+    let mut clockrate = 16;
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -73,7 +73,7 @@ fn main() {
             }
         }
         my_cpu.interpret_command();
-        thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
+        //thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
         //println!("{:?}", graphics_state);
         //let key_strokes:
 

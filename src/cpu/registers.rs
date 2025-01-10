@@ -109,7 +109,7 @@ pub mod registers {
                 DoubleReg::HLM => {
                     let mut addr = glue(self.h, self.l);
                     addr -= 1;
-                    info!("ADDR {:X?}", addr);
+                    //info!("ADDR {:X?}", addr);
                     self.h = (addr >> 8) as u8;
                     self.l = addr as u8;
                     addr + 1

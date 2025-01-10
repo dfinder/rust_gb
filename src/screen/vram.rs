@@ -1,5 +1,9 @@
 pub mod vram {
 
+    use std::{thread, time::Duration};
+
+    use log::info;
+
     use crate::{memory::memory_wrapper::AsMemory, screen::screen::ColorID};
 
     #[repr(packed)]
@@ -40,6 +44,9 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            if val != 0 {
+                info!("WE WRITE TO VRAM: {:X?}@{:X?}", val, addr);
+            }
             match addr {
                 0x0000..=0x07ff => self.block0.memory_write(addr, val),
                 0x0800..=0x0fff => self.block1.memory_write(addr - 0x0800, val),
@@ -62,10 +69,13 @@ pub mod vram {
     }
     impl AsMemory for TileMap {
         fn memory_map(&mut self, addr: u16) -> u8 {
-            return self.tiles[(addr << 5) as usize][(addr % 32) as usize];
+            return self.tiles[(addr >> 5) as usize][(addr % 32) as usize];
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            if val != 0 {
+                info!("WE WRITE TO THE TILE MAP: {:X?}@{:X?}", val, addr);
+            }
             self.tiles[(addr >> 5) as usize][(addr % 32) as usize] = val
         }
     }
@@ -86,6 +96,9 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            if val != 0 {
+                info!("WE WRITE TO BLOCK: {:X?}@{:X?}", val, addr);
+            }
             self.objects[(addr >> 4) as usize].memory_write(addr % 16, val)
         }
     }
@@ -102,6 +115,9 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
+            if val != 0 {
+                info!("WE WRITE TO THIS BLOCK {:X?}@{:X?}", val,addr);
+            }
             self.data[addr as usize] = val
         }
     }

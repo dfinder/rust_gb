@@ -18,6 +18,7 @@ pub mod cpu {
     use std::cell::RefCell;
     use std::fs::File;
     use std::ops::Sub;
+    use std::os::unix::fs::FileExt;
     use std::rc::Rc;
     use std::thread;
     use std::time::Duration;
@@ -38,6 +39,7 @@ pub mod cpu {
         cb_block_lookup: [FunFind; 11],
         instruction_register: u8,
         extra_waiting: bool,
+        boot_rom_double: File,
         ime_flag: InterruptState,
         stopped: bool,
         clock_cycle_wait: Rc<RefCell<u8>>,
@@ -65,6 +67,7 @@ pub mod cpu {
                 stopped: false,
                 halted: false,
                 cb_flag: false,
+                boot_rom_double: File::create("BOOT_ROM_DOUBLE.bin").expect("test"),
                 //fetched_instruction:CpuStruct::nop,
                 clock_cycle_wait: wait,
             } //Find a different way of doing this:
@@ -83,12 +86,14 @@ pub mod cpu {
 
                 if !self.stopped {
                     //info!("{:?}", self.cpu_state.registers);
-                    //println!("We interpret a command");
                     //TODO: Fetch is actually the last part of the instruction, so the PC counter is always one ahead of the actual instruction
                     let current_pc = self.cpu_state.get_pc();
+                    //if current_pc 
                     //if current_pc>0x90{
                     //    thread::sleep(Duration::new(1, 0))
                     //}
+
+                    let _ = self.boot_rom_double.write_at(&[0xFF], current_pc as u64);
                     self.instruction_register = self.cpu_state.get_byte(current_pc);
                     ////info!("IR:{:X?}", self.instruction_register);
                     let mut taken: bool = false;
@@ -546,6 +551,7 @@ pub mod cpu {
             //info!("CPU OP: Compare");
             let operand = self.alu_operand();
             let acc = self.cpu_state.get_acc();
+            //info!("Operand:{:?}",operand);
             self.cpu_state.set_flag(Flag::Zero, acc == operand);
             self.cpu_state.set_flag(Flag::Neg, true);
             self.cpu_state
@@ -640,7 +646,7 @@ pub mod cpu {
             self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x - 2);
             self.cpu_state
-                .set_pc((self.instruction_register & 0x38) as u16);
+                .set_pc(((self.instruction_register & 0x38)-1) as u16);
         }
         pub fn pop(&mut self) {
             //info!("CPU OP: POP");

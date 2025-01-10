@@ -10,7 +10,7 @@ pub mod screen {
     use log::info;
     use sdl2::{pixels::Color, rect::Point, render::Canvas, video::Window};
 
-    use std::{cell::RefCell, rc::Rc, thread, time::Duration};
+    use std::{cell::RefCell, fs::File, io::Write, rc::Rc, thread::{self, Thread}, time::Duration};
 
     use crate::{
         cpu::interrupt::interrupt::Interrupt,
@@ -20,6 +20,8 @@ pub mod screen {
             vram::vram::Vram,
         },
     };
+
+    use super::vram::vram::TileMap;
     type VirtualBoundedScreen = [[GBColor; 160]; 144];
     pub struct Screen {
         virtual_unrendered_screen: VirtualBoundedScreen,
@@ -40,7 +42,7 @@ pub mod screen {
         Black,
         Transparent,
     }
-    #[derive(Copy, Clone, Eq, Hash, PartialEq)]
+    #[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
     pub enum ColorID {
         Unset,
         Zero,
@@ -75,22 +77,109 @@ pub mod screen {
             return self.virtual_rendered_screen;
         }
         pub fn hblank(&mut self) {}
+        fn dirty_vblank(&mut self) {
+            self.canvas.clear();
+            let vc = self.video_controller.borrow().clone();
+            let mut background: [[Color; 256]; 256] = [[Color::WHITE; 256]; 256];
+            let tile_data_area = match vc.lcdc >> 4 % 2 != 0 {
+                true => (&self.vram.block0, &self.vram.block1),
+                false => (&self.vram.block2, &self.vram.block1),
+            };
+            let screen_color = |x| match x {
+                GBColor::White => Color::RGB(0xFF, 0xFF, 0xFF),
+                GBColor::LightGrey => Color::RGB(0xb8, 0xb8, 0xb8),
+                GBColor::DarkGrey => Color::RGB(0x68, 0x68, 0x68),
+                GBColor::Black => Color::RGB(0x00, 0x00, 0x00),
+                GBColor::Transparent => Color::RGB(0xff, 0x11, 0x11),
+            };
+            let color_mapping = |x| match x {
+                0 => GBColor::White,
+                1 => GBColor::LightGrey,
+                2 => GBColor::DarkGrey,
+                3 => GBColor::Black,
+                _ => unreachable!(),
+            };
+            let background_palette = |x| {
+                screen_color(color_mapping(match x {
+                    ColorID::Zero => vc.bgp & 0x03,
+                    ColorID::One => (vc.bgp & 0x0C) >> 2,
+                    ColorID::Two => (vc.bgp & 0x30) >> 4,
+                    ColorID::Three => vc.bgp >> 6,
+                    ColorID::Unset => unreachable!(),
+                }))
+            };
+            let tile_data_lookup = |x: u8| {
+                match x {
+                    0..128 => tile_data_area.0.objects[x as usize],
+                    128..=255 => tile_data_area.1.objects[(x - 128) as usize],
+                }
+                .get_tile()
+                .map(|x| x.map(background_palette))
+            };
+
+            let window_tile_map = match vc.lcdc >> 5 % 2 == 0 {
+                true => &self.vram.tmap2.tiles,
+                false => &self.vram.tmap1.tiles,
+            };
+            //info!("{:?}",vc.lcdc >> 5 % 2 != 0);
+            let mut debug = File::create("background.bin").expect("lmao");
+            for tile_y in 0..32 {
+                for tile_x in 0..32 {
+                    let tile = tile_data_lookup(window_tile_map[tile_y][tile_x]);
+                    for pixel_x in 0..8 {
+                        for pixel_y in 0..8 {
+                            //if tile[pixel_y][pixel_x]!=Color::RGB(0xFF, 0xFF, 0xFF){
+                            //    info!("WE HAVE A NON WHITE PIXEL");
+                            //    thread::sleep(Duration::from_secs(5));
+                            //}
+                            background[(8 * tile_y) + pixel_y][(8 * tile_x) + pixel_x] =
+                                tile[pixel_y][pixel_x];
+                        }
+                    }
+                }
+            }
+            for row in background {
+                debug.write(&row.map(|x| match x {
+                    Color{r:0xFF, b:0xFF, g:0xFF,a:_} => 0xFF,
+                    Color{r:0xb8, b:0xb8, g:0xb8,a:_} => 0xB6,
+                    Color{r:0x68, b:0x68, g:0x68,a:_} => 0x67,
+                    Color{r:0x00, b:0x00, g:0x00,a:_} => 0x00,
+                    Color{r:0xff, b:0x11, g:0x11,a:_} => 0x11,
+                    _ => unreachable!(),
+                } as u8)).expect("lmao");
+            }
+
+            for i in 0..144 {
+                for j in 0..160 {
+                    self.canvas.set_draw_color(
+                        background[((i - vc.scy) % 144) as usize][((j - vc.scx) % 160) as usize],
+                    );
+                    self.canvas
+                        .draw_point(Point::new(j as i32, i as i32))
+                        .expect("Pixel failed to write");
+                }
+            }
+            self.canvas.present();
+            self.virtual_unrendered_screen = [[GBColor::Transparent; 160]; 144];
+        }
         pub fn vblank(&mut self) {
             self.canvas.clear();
 
-            info!("WE DRAW THE CANVAS");
+            //info!("WE DRAW THE CANVAS");
             //info!("{:?}",&self.virtual_unrendered_screen);
             //thread::sleep(Duration::from_secs(5));
+
+            let screen_color = |x| match x {
+                GBColor::White => Color::RGB(0xFF, 0xFF, 0xFF),
+                GBColor::LightGrey => Color::RGB(0xb8, 0xb8, 0xb8),
+                GBColor::DarkGrey => Color::RGB(0x68, 0x68, 0x68),
+                GBColor::Black => Color::RGB(0x00, 0x00, 0x00),
+                GBColor::Transparent => Color::RGB(0xff, 0x11, 0x11),
+            };
             for i in 0..144 {
                 for j in 0..160 {
-                    let screen_color = match &self.virtual_unrendered_screen[i][j] {
-                        GBColor::White => Color::RGB(0xFF, 0xFF, 0xFF),
-                        GBColor::LightGrey => Color::RGB(0xb8, 0xb8, 0xb8),
-                        GBColor::DarkGrey => Color::RGB(0x68, 0x68, 0x68),
-                        GBColor::Black => Color::RGB(0x00, 0x00, 0x00),
-                        GBColor::Transparent => Color::RGB(0xff, 0x11, 0x11),
-                    };
-                    self.canvas.set_draw_color(screen_color);
+                    self.canvas
+                        .set_draw_color(screen_color(self.virtual_unrendered_screen[i][j]));
                     self.canvas
                         .draw_point(Point::new(j as i32, i as i32))
                         .expect("Pixel failed to write");
@@ -101,6 +190,7 @@ pub mod screen {
             //Reset the internal screen
         }
         pub fn oam_scan(&mut self) {
+            //info!("WE SCAN OAM");
             let vc;
             {
                 vc = self.video_controller.borrow().clone();
@@ -108,20 +198,26 @@ pub mod screen {
             if self.objs.1 == 10 {
                 return;
             }
+            //info!("dots:{:?}", self.dots);
             if (vc.lcdc >> 1) % 2 == 1 && self.dots % 2 == 0 {
                 let big = (vc.lcdc >> 2) % 2 == 1;
-
                 let oam = self.oam.oam_list[(self.dots >> 1) as usize]; //We may need to truncate this?
+                                                                        //info!("OAM is{:?}",oam);
+
+                //thread::sleep(Duration::from_secs(5));
                 let count: usize = self.objs.1 as usize;
                 if (oam.ypos..oam.ypos + 8 + (8 * (big as u8))).contains(&vc.ly) {
                     self.objs.0[count] = Some((self.dots >> 1) as u8);
                     self.objs.1 += 1;
                 }
             }
+
+            //info!("OUR OAM IS {:?}", self.objs);
         }
         fn draw_line(&mut self) {
             //Run Mode 3 algorithm
             let bgp = self.video_controller.borrow().bgp;
+
             let color_mapping = |x| match x {
                 0 => GBColor::White,
                 1 => GBColor::LightGrey,
@@ -129,6 +225,7 @@ pub mod screen {
                 3 => GBColor::Black,
                 _ => unreachable!(),
             };
+
             let background_palette = |x| match x {
                 ColorID::Zero => color_mapping(bgp & 0x03),
                 ColorID::One => color_mapping(bgp & 0x0C >> 2),
@@ -146,7 +243,7 @@ pub mod screen {
                     true => (&self.vram.block0, &self.vram.block1),
                     false => (&self.vram.block2, &self.vram.block1),
                 };
-                let title_data_lookup = |x: u8| {
+                let tile_data_lookup = |x: u8| {
                     match x {
                         0..128 => tile_data_area.0.objects[x as usize],
                         128..=255 => tile_data_area.1.objects[(x - 128) as usize],
@@ -154,7 +251,7 @@ pub mod screen {
                     .get_tile()
                 };
                 if vc.lcdc >> 5 % 2 != 0 && vc.wy < vc.ly {
-                    //Actually ues the window
+                    //Window
                     let window_tile_map = match vc.lcdc >> 5 % 2 != 0 {
                         true => &self.vram.tmap2,
                         false => &self.vram.tmap1,
@@ -164,26 +261,29 @@ pub mod screen {
                         let in_tile_row = vc.ly % 8;
                         for in_tile_x in 0..8 {
                             window[8 * tile_x + in_tile_x] = background_palette(
-                                title_data_lookup(window_tile_map.tiles[tile_y as usize][tile_x])
+                                tile_data_lookup(window_tile_map.tiles[tile_y as usize][tile_x])
                                     [in_tile_row as usize][in_tile_x],
                             );
                         }
                     }
                 }
-                let bg_tile_map = match vc.lcdc >> 3 % 2 != 0 {
-                    true => &self.vram.tmap2,
-                    false => &self.vram.tmap1,
+                let bg_tile_map = match vc.lcdc >> 3 % 2 == 0 {
+                    true => &self.vram.tmap1,
+                    false => &self.vram.tmap2,
                 };
 
-                info!("{:X?}", vc.scy);
-                info!("{:X?}", vc.ly);
+                //info!("{:X?}", vc.scy);
+                //info!("{:X?}", vc.ly);
                 for tile_x in 0..32 {
-                    let view_port_y = vc.scy + vc.ly; //So we're on line 65, and teh 
+                    let view_port_y = vc.scy + vc.ly; //So we're on line 65, and teh
                     let tile_y = view_port_y >> 3;
                     let in_tile_row = view_port_y % 8;
                     for in_tile_x in 0..8 {
+                        //info!("{:?}",
+                        //    tile_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x]));
+                        //    thread::sleep(Duration::from_secs(5));
                         background[8 * tile_x + in_tile_x] = background_palette(
-                            title_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x])
+                            tile_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x])
                                 [in_tile_row as usize][in_tile_x],
                         );
                     }
@@ -194,8 +294,8 @@ pub mod screen {
                 }
                 if vc.lcdc >> 5 % 2 != 0 && vc.wy < vc.ly {
                     for i in 0..160 - vc.wx - 7 {
-                        if (vc.wx as i8)-7>0{
-                            info!("WX:{:#X?}, PIXEL ID:{:#X?}",vc.wx, i);
+                        if (vc.wx as i8) - 7 > 0 {
+                            info!("WX:{:#X?}, PIXEL ID:{:#X?}", vc.wx, i);
                             pixel_line[(vc.wx - 7 + i) as usize] = window[i as usize]
                         }
                     }
@@ -273,19 +373,13 @@ pub mod screen {
                     }
                 }
             }
-            if pixel_line.map(|x|match x{
-                GBColor::Transparent => false,
-                _ => true
-            }).contains(&true){
-                info!("{:?}",pixel_line);
 
-            //thread::sleep(Duration::from_secs(1));
-            }
-            
             self.virtual_unrendered_screen[self.video_controller.borrow().ly as usize] = pixel_line;
         }
         pub fn on_clock(&mut self) {
-            self.ppu_dot_cycle();
+            if self.video_controller.borrow().lcdc >> 7 == 1 {
+                self.ppu_dot_cycle();
+            }
         }
         pub fn ppu_dot_cycle(&mut self) -> (Option<Interrupt>, Option<Interrupt>) {
             let mut interrupt: (Option<Interrupt>, Option<Interrupt>) = (None, None);
@@ -294,13 +388,27 @@ pub mod screen {
             let ly: u8;
             {
                 let mut vc = self.video_controller.borrow_mut();
+
+                //info!("VC:{:?}", vc);
+                //info!("DOTS:{:?}",self.dots);
                 ly = vc.ly;
                 if self.dots == 0 && ly < 144 {
+                    //0->2
+                    //vc.stat += 2;
                     init_mode_2 = true;
                 }
                 if self.dots == 80 && ly < 144 {
                     vc.stat += 1; //2->3
                     init_mode_3 = true;
+                }
+
+                if self.dots == 300 && ly < 144 {
+                    //3->0
+                    vc.stat -= 3;
+                    if vc.stat & 0x10 > 0 {
+                        //Test if LCDC bit 5 is active
+                        interrupt.0 = Some(Interrupt::LCDC);
+                    }
                 }
             }
             {
@@ -316,7 +424,7 @@ pub mod screen {
                 let mut vblank_handler = false;
                 {
                     let mut vc = self.video_controller.borrow_mut();
-                    if self.dots > 456 {
+                    if self.dots > 455 {
                         //On row adjustment
                         self.dots = 0;
                         vc.ly += 1;
@@ -325,10 +433,10 @@ pub mod screen {
                             vc.stat |= 0x04; //Set bit 2 to true
                             if vc.stat & 0x40 > 0 {
                                 //Test if LCDC bit 6 is active
-                                interrupt.0 = Some(Interrupt::LCDC)
+                                interrupt.0 = Some(Interrupt::LCDC);
                             }
                         } else {
-                            vc.stat &= 0xFB //Turn off bit 2, resetting us to mode 1
+                            vc.stat &= 0xFB; //Turn off bit 2, turning off the LCDC
                         }
                         if vc.ly < 144 {
                             //ENTER MODE 2
@@ -336,31 +444,23 @@ pub mod screen {
                             vc.stat += 2;
                             if vc.stat & 0x20 > 0 {
                                 //Test if LCDC bit 5 is active
-                                interrupt.0 = Some(Interrupt::LCDC)
+                                interrupt.0 = Some(Interrupt::LCDC);
                             }
                         }
                         if vc.ly == 144 {
                             //mode 0->1
                             vc.stat += 1;
                             vblank_handler = true;
-                            interrupt.1 = Some(Interrupt::VBlank) //Remember, VBlank is a separate thing
+                            interrupt.1 = Some(Interrupt::VBlank); //Remember, VBlank is a separate thing
                         }
+
                         if vc.ly > 153 {
                             //mode 1->2
                             vc.ly = 0;
                             vc.stat += 1;
                             if vc.stat & 0x20 > 0 {
                                 //Test if LCDC bit 5 is active
-                                interrupt.0 = Some(Interrupt::LCDC)
-                            }
-                        }
-
-                        if vc.ly > 220 {
-                            //mode 3->0
-                            vc.stat -= 3;
-                            if vc.stat & 0x10 > 0 {
-                                //Test if LCDC bit 5 is active
-                                interrupt.0 = Some(Interrupt::LCDC)
+                                interrupt.0 = Some(Interrupt::LCDC);
                             }
                         }
                     }
@@ -368,7 +468,7 @@ pub mod screen {
 
                 self.dots += 1; //Increase the dot
                 if vblank_handler {
-                    self.vblank();
+                    self.dirty_vblank();
                 }
                 return interrupt;
             }
@@ -388,6 +488,8 @@ pub mod screen {
         pub fn write_vram(&mut self, addr: u16, val: u8) {
             if self.mode() != 3 {
                 self.vram.memory_write(addr, val);
+            } else {
+                info!("Our issue is here!");
             }
         }
         pub fn read_oam(&mut self, addr: u16) -> u8 {
