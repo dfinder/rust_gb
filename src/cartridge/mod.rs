@@ -10,6 +10,7 @@ mod mmm01;
 pub mod cartridge {
     use std::{fs::File, io::Read};
 
+
     use crate::memory::memory_wrapper::AsMemory;
 
     use super::{
@@ -67,8 +68,8 @@ pub mod cartridge {
     }
     impl AsMemory for Cartridge {
         fn memory_map(&mut self, addr: u16) -> u8 {
-            
-            if addr > 0xA000 {
+            //dbg!(addr);
+            if addr >= 0xA000 {
                 return match self {
                     Cartridge::Mbc0(mem) => mem.ram_read(addr - 0xA000),
                     Cartridge::Mbc1(mem) => mem.ram_read(addr - 0xA000),

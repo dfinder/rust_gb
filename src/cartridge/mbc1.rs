@@ -33,6 +33,7 @@ pub mod mbc1 {
             };
         }
         fn rom_read(&mut self, addr: u16) -> u8 {
+            info!("addr{:X?}",addr);
             match addr {
                 0..=0x3FFF => self.rom[0][addr as usize],
                 0x4000..=0x7fff => self.rom[self.rom_bank_num][(addr-0x4000) as usize],

@@ -62,7 +62,7 @@ pub mod oam {
         fn memory_write(&mut self, addr: u16, val: u8) {
             info!("HEY WE MAKE IT TO WRITING THE OAM STRUCT");
 
-            (Duration::from_secs(10));
+            //(Duration::from_secs(10));
             self.oam_list[(addr >> 2) as usize].memory_write(addr & 0x0003, val)
         }
     }

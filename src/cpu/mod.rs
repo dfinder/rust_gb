@@ -7,7 +7,8 @@ pub mod interrupt;
 pub mod cpu {
 
     use super::cpu_state::cpu_state::CpuState;
-    use super::function_table::function_table::FunFind;
+
+    use super::function_table::function_table::{CPUFn, Dest16, Dest8, FunFind, Src16, Src8};
     use super::interrupt::interrupt::Interrupt;
     use crate::audio::audio_controller::AudioController;
     use crate::cpu::registers::registers::{DoubleReg, Flag, SingleReg};
@@ -18,13 +19,15 @@ pub mod cpu {
     use std::cell::RefCell;
     use std::fs::File;
     use std::ops::Sub;
-    use std::os::unix::fs::FileExt;
+
     use std::rc::Rc;
-    use std::thread;
+    use std::thread::{self, Thread};
     use std::time::Duration;
+    use std::{mem, u8};
+    pub type CPUFunct2<'a> = &'a dyn Fn(&mut CpuStruct);
 
     //const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
-    pub type CPUFunct = fn(&mut CpuStruct);
+
     enum InterruptState {
         Enabled, //Despite naming, it's really that we have E, DI, AD as "enabled" states
         DisableInterrupt,
@@ -35,11 +38,10 @@ pub mod cpu {
     }
     pub struct CpuStruct {
         pub cpu_state: CpuState,
-        function_lookup: [FunFind; 63],
-        cb_block_lookup: [FunFind; 11],
+        function_lookup: [FunFind;63],
+        cb_block_lookup: [FunFind;11],
         instruction_register: u8,
-        extra_waiting: bool,
-        boot_rom_double: File,
+        //boot_rom_double: File,
         ime_flag: InterruptState,
         stopped: bool,
         clock_cycle_wait: Rc<RefCell<u8>>,
@@ -51,7 +53,7 @@ pub mod cpu {
     }
     impl CpuStruct {
         pub fn new(
-            joypad: Rc<RefCell<Joypad>>,
+            joypad: Joypad,
             audio: AudioController,
             canvas: Canvas<Window>,
             cartridge: File,
@@ -62,13 +64,11 @@ pub mod cpu {
                 instruction_register: 0x00, //initalize to a noop
                 function_lookup: FunFind::function_lookup(),
                 cb_block_lookup: FunFind::cb_block_lookup(),
-                extra_waiting: false,
                 ime_flag: InterruptState::DisableInterrupt, //Interreupt master enable
                 stopped: false,
                 halted: false,
                 cb_flag: false,
-                boot_rom_double: File::create("BOOT_ROM_DOUBLE.bin").expect("test"),
-                //fetched_instruction:CpuStruct::nop,
+                //boot_rom_double: File::create("BOOT_ROM_DOUBLE.bin").expect("test"),
                 clock_cycle_wait: wait,
             } //Find a different way of doing this:
               //Break things apart according to our old pipeline model
@@ -82,68 +82,80 @@ pub mod cpu {
                     *current_wait = current_wait.sub(1);
                 }
             }
+
+            let mut waiting = 0;
             if self.clock_cycle_wait.borrow().eq(&0) {
-
                 if !self.stopped {
-                    //info!("{:?}", self.cpu_state.registers);
-                    //TODO: Fetch is actually the last part of the instruction, so the PC counter is always one ahead of the actual instruction
                     let current_pc = self.cpu_state.get_pc();
-                    //if current_pc 
-                    //if current_pc>0x90{
-                    //    thread::sleep(Duration::new(1, 0))
-                    //}
-
-                    let _ = self.boot_rom_double.write_at(&[0xFF], current_pc as u64);
                     self.instruction_register = self.cpu_state.get_byte(current_pc);
-                    ////info!("IR:{:X?}", self.instruction_register);
-                    let mut taken: bool = false;
-                    self.extra_waiting = false;
+                    info!("R:{:?}", self.cpu_state.registers);
+                    //info!("IR:{:X?}", self.instruction_register);
+                    if (0x0095..0x00A7).contains(&current_pc ){
+                        ()//thread::sleep(Duration::from_secs(1));
+                    } 
                     if self.instruction_register != 0xF3 {
                         //0xf3= disable interrutpts
                         self.handle_interrupts();
                     }
-                    let mut fun_pointer: fn(&mut CpuStruct) = CpuStruct::nop;
-                    let mut waiting = 0;
-                    let mut cond_waiting = 0;
                     if !self.cb_flag {
-                        for fun_entry in &self.function_lookup {
+                        for fun_entry in self.function_lookup {
                             if (self.instruction_register & fun_entry.mask) == fun_entry.value {
-                                fun_pointer = fun_entry.function;
+                                match fun_entry.function{
+                                    CPUFn::Ld8(src_enum, dest_enum) => self.ld(&src_enum, &dest_enum),
+                                    CPUFn::Ld16(src16, dest16) => self.ld16( &src16, &dest16),
+                                    CPUFn::ALU8(alu_func) => {
+                                        //Where we're storing things, usually A
+                                        
+                                        let op_1 = self.cpu_state.get_acc();
+                                        let op_2 = self.alu_operand();
+                                        let val: u8 = alu_func(self, op_1, op_2);
+                                        self.cpu_state.set_acc(val)
+                                    },
+                                    CPUFn::ALU8Self(alu_func) => {
+                                        let reg = self.cpu_state.get_r8_end(self.instruction_register); //Where we're storing things
+                                        let op = self.cpu_state.get_r8_val(reg);
+                                        let val: u8 = alu_func(self, op);
+                                        self.cpu_state.set_r8(reg, val);
+                                    },
+                                    CPUFn::ALU16Self(alu_fun) => {
+                                        let reg: DoubleReg =
+                                            self.cpu_state.r16_tbl(self.instruction_register);
+                                        let op = self.cpu_state.get_r16_val(reg);
+                                        let val = alu_fun(self, op);
+                                        self.cpu_state.set_r16(reg, val);
+                                    },
+                                    CPUFn::Other(x) => x(self),
+                                };
                                 waiting = fun_entry.wait;
-                                if fun_entry.wait_cond.is_some() {
-                                    cond_waiting = fun_entry.wait_cond.unwrap();
-                                }
-                                taken = true;
+                                break;
                             }
                         }
                     } else {
-                        self.cb_flag = false;
-                        for fun_entry in &self.cb_block_lookup {
-                            if (self.instruction_register & fun_entry.mask) == fun_entry.value {
-                                fun_pointer = fun_entry.function;
-                                waiting = fun_entry.wait;
-                                if fun_entry.wait_cond.is_some() {
-                                    cond_waiting = fun_entry.wait_cond.unwrap();
+                        {
+                            self.cb_flag = false;
+                            let lookup = &self.cb_block_lookup;
+                            for fun_entry in lookup {
+                                if (self.instruction_register & fun_entry.mask) == fun_entry.value {
+                                    match fun_entry.function {
+                                        CPUFn::ALU8Self(alu_func) => {
+                                            let reg = self.cpu_state.get_r8_end(self.instruction_register); //Where we're storing things
+                                            let op = self.cpu_state.get_r8_val(reg);
+                                            let val: u8 = alu_func(self, op);
+                                            self.cpu_state.set_r8(reg, val);
+                                        }
+                                        _ => unreachable!(),
+                                    };
+                                    break;
                                 }
-                                taken = true;
                             }
                         }
                     }
-                    if !taken {
-                        panic!("we didn't do anything!")
-                    }
-                    fun_pointer(self);
-                    if self.extra_waiting {
-                        self.wait(waiting);
-                    } else {
-                        self.wait(cond_waiting);
-                    }; //Evaluate for sanity
- //This always overwrites the next instruction.
-                } else   {
+                } else {
                     self.handle_interrupts(); //We must handle interrutps for stop case.
                 }
+
                 self.cpu_state.inc_pc();
-                
+                self.wait(waiting);
             }
             self.cpu_state.on_clock()
             //self.interpret_command(function_lookup, cb_lookup)
@@ -158,15 +170,15 @@ pub mod cpu {
             //4.19 mhz * 4 t cycles
             //thread::sleep(4 * CLOCK_PERIOD * cycles.into());
         }
-        pub fn test_init(&mut self){
+        pub fn test_init(&mut self) {
             self.cpu_state.set_r8(SingleReg::A, 0x01);
             self.cpu_state.set_flags(true, false, false, false);
             self.cpu_state.set_r8(SingleReg::C, 0x13);
             self.cpu_state.set_r8(SingleReg::E, 0xd8);
             self.cpu_state.set_r8(SingleReg::H, 0x01);
             self.cpu_state.set_r8(SingleReg::L, 0x4D);
-            self.cpu_state.set_r16_val(DoubleReg::PC, 0x0100);
-            self.cpu_state.set_r16_val(DoubleReg::PC, 0xFFFE);
+            self.cpu_state.set_r16(DoubleReg::PC, 0x0100);
+            //self.cpu_state.set_r16_val(DoubleReg::PC, 0xFFFE);
         }
         pub fn handle_interrupts(&mut self) {
             self.ime_flag = match self.ime_flag {
@@ -193,10 +205,9 @@ pub mod cpu {
                         self.cpu_state.set_byte(0xFF0F, interrupt_flag ^ bit_idx); //unset bit
                         self.ime_flag = InterruptState::Disabled;
                         let pc = self.cpu_state.get_r16_val(DoubleReg::PC); //CALL
-                        self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
+                        self.cpu_state.set_r16_mem_16(DoubleReg::SP, pc);
                         self.cpu_state.change_r16(DoubleReg::SP, &|x| x - 2);
                         self.cpu_state.set_pc(target_call);
-                        //self.wait(5);
                     }
                     self.halted = false; //Implement the Halt bug!
                     break;
@@ -213,65 +224,57 @@ pub mod cpu {
             self.cpu_state.get_cond(self.instruction_register)
         }
         pub fn alu_register(&mut self) -> SingleReg {
-            let ret = match self.instruction_register > 0b11000000 {
-                true => SingleReg::A,
-                false => self.cpu_state.get_r8_end(self.instruction_register),
+            let ret = match self.instruction_register > 0xc0{
+                false => SingleReg::A,
+                true => self.cpu_state.get_r8_end(self.instruction_register),
             };
-            ////info!("ALU Register is:{:?}", ret);
+
+            //info!("instruction register is:{:x?}", self.instruction_register);
+            //info!("ALU Register is:{:?}", ret);
             ret
         }
         pub fn alu_operand(&mut self) -> u8 {
-            let ret: u8 = match self.instruction_register > 0xC0 {
+            //let ret: u8 =
+            match self.instruction_register > 0xC0 {
                 true => self.cpu_state.get_imm8(),
-                false => {
-                    self.extra_waiting = true;
-                    let register = self.cpu_state.get_r8_end(self.instruction_register);
-                    self.cpu_state.get_r8_val(register)
-                }
-            };
-            ////info!("ALU register output {:?}", ret);
-            ret
+                false => self.get_r8_end_val()
+            }
+            //info!("ALU register output {:?}", ret);
+            //ret
         }
         pub fn nop(&mut self) {
             //info!("CPU OP: NOP");
             ()
         }
         // Rotations
-        pub fn rl(&mut self) {
-            //info!("CPU Operation is Rotate Left through Carry");
-            let val = self.alu_operand();
-            let reg = self.alu_register();
+        pub fn rl(&mut self, op: u8) -> u8 {
+            info!("CPU Operation is Rotate Left through Carry");
             let carry: bool = self.cpu_state.get_flag(Flag::Carry);
-            self.cpu_state.change_r8(reg, &|x| x << 1 + (carry as u8)); //Check to see if I need wrapping left shift
-            self.cpu_state.set_flag(Flag::Carry, val > 127);
+            info!("{:X?}",op);
+            self.cpu_state.set_flag(Flag::Carry, op > 127);
+            (op << 1) + (carry as u8)
         }
-        pub fn rlc(&mut self) {
-            //Rotate left
 
-            //info!("CPU Operation is Rotate Left, copy Carry");
-            let val = self.alu_operand();
-            let reg = self.alu_register();
-            self.cpu_state.set_flag(Flag::Carry, val > 127);
-            self.cpu_state.change_r8(reg, &|x| x.rotate_left(1));
+        pub fn rlc(&mut self, op: u8) -> u8 {
+            //Rotate left
+            //info!("CPU Operation is Rotate Left circular");
+            self.cpu_state.set_flag(Flag::Carry, op > 127);
+            op.rotate_left(1)
         }
-        pub fn rr(&mut self) {
+        pub fn rr(&mut self, op: u8) -> u8 {
             //info!("CPU Operation is Rotate Right");
-            let reg = self.alu_register();
-            let val = self.alu_operand();
             let carry: bool = self.cpu_state.get_flag(Flag::Carry);
-            let bottom: bool = (val % 2) == 1;
+            let bottom: bool = (op % 2) == 1;
             self.cpu_state.set_flag(Flag::Carry, bottom);
-            self.cpu_state
-                .change_r8(reg, &|x| (x >> 1) + ((carry as u8) << 7));
+            (op >> 1) + ((carry as u8) << 7)
         }
-        pub fn rrc(&mut self) {
-            //info!("CPU Operation is Rotate Right through carry");
-            let value = self.alu_operand();
-            let reg = self.alu_register();
-            self.cpu_state.set_flag(Flag::Carry, (value % 2) == 1);
-            self.cpu_state.change_r8(reg, &|x| x.rotate_right(1));
+        pub fn rrc(&mut self, op: u8) -> u8 {
+            //info!("CPU Operation is Rotate Right circular");
+            self.cpu_state.set_flag(Flag::Carry, (op % 2) == 1);
+            op.rotate_right(1)
         }
-        pub fn daa(&mut self) {
+
+        pub fn daa(&mut self, acc: u8) -> u8 {
             //info!("CPU Operation is Decimal Adjust Accumulator");
             let subtract = self.cpu_state.get_flag(Flag::Neg);
             let hcarry = self.cpu_state.get_flag(Flag::HalfCarry);
@@ -285,154 +288,170 @@ pub mod cpu {
                 offset |= 0x60;
             }
             //let fun = &|x|x+offset;
+            let ret;
             if subtract {
-                self.cpu_state.apply_fun_to_acc(&|x| x.wrapping_sub(offset));
+                ret = acc.wrapping_sub(offset);
             } else {
-                self.cpu_state.apply_fun_to_acc(&|x| x.wrapping_add(offset));
+                ret = acc.wrapping_add(offset);
             }
             self.cpu_state.set_flag(Flag::HalfCarry, false);
-            let acc = self.cpu_state.get_acc();
-            self.cpu_state.set_flag(Flag::Zero, acc == 0);
-            self.cpu_state.set_flag(Flag::Carry, acc > 0x99);
+            self.cpu_state.set_flag(Flag::Zero, ret == 0);
+            self.cpu_state.set_flag(Flag::Carry, ret > 0x99);
+            ret
         }
         //Load Immediate
-        pub fn ldi_r16(&mut self) {
-            //info!("CPU Operation is Load: MM16->2REG");
-            //0x01
-            let reg_pair: DoubleReg = self.cpu_state.r16_tbl(self.instruction_register);
-            let imm2: u16 = self.cpu_state.get_imm16();
-            self.cpu_state.set_r16_val(reg_pair, imm2);
-            //This may actually also be like... just run str r8 imm twice.
-        }
-        pub fn ldi_r8(&mut self) {
-            //info!("CPU OP: Load IMM8->REG");
-            let arg_reg: SingleReg = self.cpu_state.get_r8_mid(self.instruction_register);
-            let imm: u8 = self.cpu_state.get_imm8();
-            self.cpu_state.set_r8(arg_reg, imm);
-        }
-        //Stores
-        pub fn str_acc_rmem(&mut self) {
-            //0x02
 
-            //info!("CPU OP: Store ACC->Mem");
-            let arg_reg: DoubleReg = self.cpu_state.r16_mem_tbl(self.instruction_register);
-            let mem_addr: u16 = self.cpu_state.get_r16_val(arg_reg);
-            let acc_val = self.cpu_state.get_acc();
-            self.cpu_state.set_byte(mem_addr, acc_val);
-        }
-        pub fn str_c(&mut self) {
-            //info!("CPU OP: Store ACC->[C+0xFF00]");
-            //Store A at address $FF00+C , e2
-            let value: u16 = self.cpu_state.get_r8_val(SingleReg::C) as u16 + 0xFF00;
-            let acc = self.cpu_state.get_acc();
-            self.cpu_state.set_byte(value, acc);
-        }
-        pub fn str_imm8(&mut self) {
-            //info!("CPU OP: Store ACC->[IMM8+0xFF00]");
-            let reg: u8 = self.cpu_state.get_acc();
-            let imm: u16 = self.cpu_state.get_imm8() as u16;
-            self.cpu_state.set_byte(imm + 0xFF00, reg);
-        }
-        pub fn str_imm16(&mut self) {
-            //EA
-            //info!("CPU OP: Store ACC->[IMM16]");
-            let reg: u8 = self.cpu_state.get_acc();
-            let imm: u16 = self.cpu_state.get_imm16();
-            self.cpu_state.set_byte(imm, reg);
-        }
-        //Loads
-        pub fn ld_imm8(&mut self) {
-            //info!("CPU OP: Load: 0xFF00+[IM8]->ACC");
-            let imm: u16 = (self.cpu_state.get_imm8() as u16) + 0xFF00;
-            let mem: u8 = self.cpu_state.get_byte(imm);
-            self.cpu_state.set_acc(mem)
-        }
-        pub fn ld_imm16(&mut self) {
-            //info!("Operation is Load: IMM16->ACC");
-            let imm: u16 = self.cpu_state.get_imm16();
-            let mem: u8 = self.cpu_state.get_byte(imm);
-            self.cpu_state.set_acc(mem)
-        }
-        pub fn ld_imm_sp(&mut self) {
-            //info!("Operation is Load: IMM16->SP");
-            let imm: u16 = self.cpu_state.get_imm16();
-            self.cpu_state.set_r16_val(DoubleReg::SP, imm);
-        }
-        pub fn ld_r8_r8(&mut self) {
-            let reg_dest = self.cpu_state.get_r8_mid(self.instruction_register);
-            let reg_src = self.cpu_state.get_r8_end(self.instruction_register);
-
-            //info!("CPU OP: Load {:?}->{:?}", reg_src, reg_dest);
-            let reg_val = self.cpu_state.get_r8_val(reg_src);
-            self.cpu_state.set_r8(reg_dest, reg_val);
-            self.extra_waiting = !matches!(reg_dest, SingleReg::Memptr)
-        }
-        pub fn ld_acc_addr(&mut self) {
-
-            //info!("CPU OP: Load acc->addr");
-            //Load from address into accumulator. Kinda similar to LD 7 6 0101110110
-            let reg = self.cpu_state.r16_tbl(self.instruction_register);
-            let mem: u8 = self.cpu_state.get_r16_memory(reg);
-            self.cpu_state.set_acc(mem);
-            if matches!(reg, DoubleReg::HLP) || matches!(reg, DoubleReg::HLM) {
-                self.cpu_state.set_r16_val(reg, 0);
-            }
-        }
-        pub fn ld_c(&mut self) { 
-            //A = mem($FF00 + c)
-            //info!("CPU OP: Load High[C]->addr");
-            let addr: u16 = self.cpu_state.get_r8_val(SingleReg::C) as u16 + 0xFF00;
-            let value: u8 = self.cpu_state.get_byte(addr);
-            self.cpu_state.set_acc(value);
-        }
         pub fn ld_hl_imm8(&mut self) {
             //f8
-
             //info!("CPU OP:LOAD SP+IMM -> HL");
             let stack_pointer = self.cpu_state.get_r16_val(DoubleReg::SP);
-            let imm = self.cpu_state.get_imm8() as u16;
+            let imm = self.cpu_state.get_imm8();
+            
             self.cpu_state
-                .set_r16_val(DoubleReg::HL, stack_pointer + imm);
+                .set_r16(DoubleReg::HL, stack_pointer - (0x100 - (imm as u16)));
         }
-        pub fn ld_sp_hl(&mut self) {
-            //f9
+        pub fn ld16(&mut self, source: &Src16, dest: &Dest16) {
+            let value:u16 = match source {
+                Src16::Imm16 => {
+                    self.cpu_state.get_imm16()
 
-            //info!("CPU OP:Load stack pointer into HL");
-            let stack_pointer = self.cpu_state.get_r16_val(DoubleReg::SP);
-            self.cpu_state.set_r16_val(DoubleReg::HL, stack_pointer);
+                },
+                Src16::HL => self.cpu_state.get_r16_val(DoubleReg::HL),
+                Src16::SP => self.cpu_state.get_r16_val(DoubleReg::SP),
+            };
+            //info!("{:X?}",value);
+            match dest {
+                Dest16::R16 => {
+                    let reg = self.cpu_state.r16_tbl(self.instruction_register);
+                    self.cpu_state.set_r16( reg, value);
+                }
+                Dest16::PC =>  {
+                    self.cpu_state.set_r16( DoubleReg::PC, value);
+                },
+                Dest16::SP =>  {
+                    self.cpu_state.set_r16( DoubleReg::SP, value);
+                },
+                Dest16::HL =>  {
+                    self.cpu_state.set_r16( DoubleReg::HL, value);
+                },
+            }
+        }
+        pub fn ld(&mut self, source: &Src8, dest: &Dest8) {
+            let source_value: u8 = match source {
+                Src8::Imm16Mem => {
+                    let imm = self.cpu_state.get_imm16();
+                    self.cpu_state.get_byte(imm)
+                }
+                Src8::Imm8 => self.cpu_state.get_imm8(),
+                Src8::HighBank => {
+                    let imm = self.cpu_state.get_imm8();
+                    self.cpu_state.get_byte(u16::from_be_bytes([0xff, imm]))
+                }
+                Src8::Acc => self.cpu_state.get_acc(),
+                
+                Src8::R8Mid => {
+                    let reg =self.get_r8_mid();
+
+                    self.cpu_state.get_r8_val(reg)
+                },
+                Src8::R8 => self.get_r8_end_val(),
+                Src8::HighC => {
+                    let imm = self.cpu_state.get_r8_val(SingleReg::C);
+                    self.cpu_state.get_byte(u16::from_be_bytes([0xff, imm]))
+                },
+                Src8::R16Mem => {
+                    let reg = self.cpu_state.r16_mem_tbl(self.instruction_register);
+                    self.cpu_state.get_r16_mem_8(reg)
+                },
+            };
+            match dest {
+                Dest8::R8 => {
+                    let reg = self.get_r8_mid();
+                    self.cpu_state.set_r8(reg, source_value)
+                }
+                Dest8::Imm16Mem => {
+                    let dest = self.cpu_state.get_imm16();
+                    self.cpu_state.set_byte(dest, source_value);
+                }
+                Dest8::Imm8High => {
+                    let imm = self.cpu_state.get_imm8();
+                    
+                    //info!("{:X?}",source_value);
+                    //info!("{:X?}",u16::from_be_bytes([0xff, imm]));
+                    //thread::sleep(Duration::from_secs(1));
+                    self.cpu_state
+                        .set_byte(u16::from_be_bytes([0xff, imm]), source_value);
+                }
+                Dest8::Acc => self.cpu_state.set_acc(source_value),
+                Dest8::R16Mem => {
+                    let double_reg = self.cpu_state.r16_mem_tbl(self.instruction_register);
+                    self.cpu_state.set_r16_mem_8(double_reg, source_value);
+                }
+                Dest8::HighC => {
+                    let c_val = self.cpu_state.get_r8_val(SingleReg::C);
+                    self.cpu_state
+                        .set_byte(u16::from_be_bytes([0xff, c_val]), source_value)
+                }
+            }
+        }
+        pub fn get_r8_mid(&mut self) -> SingleReg{
+            match (self.instruction_register >> 3) % 8 {
+                0 => SingleReg::B,
+                1 => SingleReg::C,
+                2 => SingleReg::D,
+                3 => SingleReg::E,
+                4 => SingleReg::H,
+                5 => SingleReg::L,
+                6 => SingleReg::Memptr,
+                7 => SingleReg::A,
+                _ => unreachable!(),
+            }
+        }
+        pub fn get_r8_end_val(&mut self) -> u8 {
+            let r8 = match self.instruction_register % 8 {
+                0 => SingleReg::B,
+                1 => SingleReg::C,
+                2 => SingleReg::D,
+                3 => SingleReg::E,
+                4 => SingleReg::H,
+                5 => SingleReg::L,
+                6 => SingleReg::Memptr,
+                7 => SingleReg::A,
+                _ => unreachable!(),
+            };
+            self.cpu_state.get_r8_val(r8)
         }
         pub fn inc_r8(&mut self) {
             //info!("CPU OP:INC R8");
-            let reg: SingleReg = self.cpu_state.get_r8_mid(self.instruction_register); //self.cpu_state.r8_op_mid(self.instruction_register);
-            let val: u8 = self.cpu_state.get_r8_val(reg);
-            self.cpu_state.set_flag(Flag::Zero, val == 0xff);
-            self.cpu_state.set_flag(Flag::HalfCarry, val == 0x0f);
-            self.cpu_state.set_flag(Flag::Neg, false);
-            self.cpu_state.change_r8(reg, &|x| x.wrapping_add(1));
+            let reg = self.get_r8_mid();
+            let mut op = self.cpu_state.get_r8_val(reg);
 
+            self.cpu_state.set_flag(Flag::Zero, op == 0xff);
+            self.cpu_state.set_flag(Flag::HalfCarry, op == 0x0f);
+            self.cpu_state.set_flag(Flag::Neg, false);
+            op = op.wrapping_add(1);
+            self.cpu_state.set_r8(reg, op);
             //self.extra_waiting = matches!(reg,SingleReg::Memptr)
         }
         pub fn dec_r8(&mut self) {
-
-            //info!("CPU OP:DEC R8");
-            let reg: SingleReg = self.cpu_state.get_r8_mid(self.instruction_register);
-            let val: u8 = self.cpu_state.get_r8_val(reg);
-            self.cpu_state.set_flag(Flag::Zero, val == 0x01);
-            self.cpu_state.set_flag(Flag::HalfCarry, val == 0x10);
+            //info!("CPU OP:INC R8");
+            let reg = self.get_r8_mid();
+            let mut op = self.cpu_state.get_r8_val(reg);
+            self.cpu_state.set_flag(Flag::Zero, op == 1);
+            self.cpu_state.set_flag(Flag::HalfCarry, op == 0x10);
             self.cpu_state.set_flag(Flag::Neg, true);
-            self.cpu_state.change_r8(reg, &|x| x.wrapping_sub(1));
+            op = op.wrapping_sub(1);
+            self.cpu_state.set_r8(reg, op);
             //self.extra_waiting = matches!(reg,SingleReg::Memptr)
         }
-        pub fn inc_r16(&mut self) {
+        pub fn inc_r16(&mut self, op: u16) -> u16 {
             //Doesn't affect flags
             //info!("CPU OP:Increment an R16");
-            let reg_pair: DoubleReg = self.cpu_state.r16_tbl(self.instruction_register);
-            self.cpu_state.change_r16(reg_pair, &|x| x + 1);
+            op.wrapping_add(1)
         }
-        pub fn dec_r16(&mut self) {
+        pub fn dec_r16(&mut self, op: u16) -> u16 {
             //info!("CPU OP:Decrement an R16");
-            let reg_pair: DoubleReg = self.cpu_state.r16_tbl(self.instruction_register);
-            self.cpu_state.change_r16(reg_pair, &|x| x - 1);
+            op.wrapping_sub(1)
         }
         pub fn add_hl(&mut self) {
             //info!("CPU OP:Increment HL");
@@ -453,7 +472,6 @@ pub mod cpu {
         }
         pub fn cpl(&mut self) {
             //Invert A
-
             //info!("CPU OP: Invert A");
             self.cpu_state.set_flag(Flag::HalfCarry, true);
             self.cpu_state.set_flag(Flag::Neg, true);
@@ -467,196 +485,210 @@ pub mod cpu {
             //info!("CPU OP: Set Carry Flag");
             self.cpu_state.set_flag(Flag::Carry, true);
         }
-        pub fn add(&mut self) {
+        pub fn add(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Add without carry");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
-            let ret = self
-                .cpu_state
-                .apply_fun_to_acc(&|x| x.wrapping_add(operand));
+            let ret = acc.wrapping_add(op);
             self.cpu_state.set_flag(Flag::Zero, ret == 0);
             self.cpu_state
-                .set_flag(Flag::Carry, None == acc.checked_add(operand));
+                .set_flag(Flag::Carry, acc.checked_add(op).is_none());
             self.cpu_state
-                .set_flag(Flag::HalfCarry, ((acc & 0x0F) + (operand & 0x0F)) > 0x10);
+                .set_flag(Flag::HalfCarry, ((acc & 0x0F) + (op & 0x0F)) > 0x10);
             self.cpu_state.set_flag(Flag::Neg, false);
+            ret
         }
-        pub fn adc(&mut self) {
+        pub fn adc(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Add with carry");
             let carry = self.cpu_state.get_flag(Flag::Carry);
-            let operand = self.alu_operand() + (carry as u8);
-            let acc = self.cpu_state.get_acc();
+            let operand = op + (carry as u8);
             self.cpu_state
                 .set_flag(Flag::Zero, acc.wrapping_add(operand) == 0);
             self.cpu_state
-                .set_flag(Flag::Carry, None == acc.checked_add(operand));
+                .set_flag(Flag::Carry, acc.checked_add(operand).is_none());
             self.cpu_state.set_flag(
                 Flag::HalfCarry,
                 ((acc & 0x0F) + (operand & 0x0F) as u8) > 0x10,
             );
             self.cpu_state.set_flag(Flag::Neg, false);
-            self.cpu_state
-                .apply_fun_to_acc(&|x| x.wrapping_add(operand));
+            acc.wrapping_add(operand)
         }
-        pub fn sub(&mut self) {
+        pub fn sub(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Sub without carry");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
-            self.cpu_state.set_flag(Flag::Zero, acc == operand);
+            self.cpu_state.set_flag(Flag::Zero, acc == op);
             self.cpu_state.set_flag(Flag::Neg, true);
             self.cpu_state
-                .set_flag(Flag::HalfCarry, (acc & 0x0F) < (operand & 0x0F));
-            self.cpu_state.set_flag(Flag::Carry, operand > acc);
-            self.cpu_state
-                .apply_fun_to_acc(&|x| x.wrapping_sub(operand));
+                .set_flag(Flag::HalfCarry, (acc & 0x0F) < (op & 0x0F));
+            self.cpu_state.set_flag(Flag::Carry, op > acc);
+            //thread::sleep(Duration::from_secs(1));
+            acc.wrapping_sub(op)
         }
-        pub fn subc(&mut self) {
+        pub fn subc(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Sub with Carry");
             let carry: u8 = self.cpu_state.get_flag(Flag::Carry) as u8;
             let operand: u8 = self.alu_operand() + carry;
-            let acc: u8 = self.cpu_state.get_acc();
             self.cpu_state.set_flag(Flag::Zero, acc == operand);
             self.cpu_state.set_flag(Flag::Neg, true);
             self.cpu_state
                 .set_flag(Flag::HalfCarry, (acc & 0x0F) < ((operand) & 0x0F));
             self.cpu_state.set_flag(Flag::Carry, operand > acc);
-            self.cpu_state
-                .apply_fun_to_acc(&|x| x.wrapping_sub(operand));
+            acc.wrapping_sub(op)
         }
-        pub fn and(&mut self) {
+        pub fn and(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: And");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
-            self.cpu_state
-                .set_flags(operand & acc == 0, false, true, false);
-            self.cpu_state.apply_fun_to_acc(&|x| x & operand);
+            self.cpu_state.set_flags(op & acc == 0, false, true, false);
+            acc & op
         }
-        pub fn xor(&mut self) {
-            //info!("CPU OP: Xor");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
+        pub fn xor(&mut self, acc: u8, op: u8) -> u8 {
+            //info!("CPU OP: Xor");;
             self.cpu_state
-                .set_flags(operand ^ acc == 0, false, true, false);
-            self.cpu_state.apply_fun_to_acc(&|x| x ^ operand);
+                .set_flags((acc ^ op) == 0, false, true, false);
+            acc ^ op
         }
-        pub fn or(&mut self) {
+        pub fn or(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Or");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
-            self.cpu_state
-                .set_flags(operand | acc == 0, false, true, false);
-            self.cpu_state.apply_fun_to_acc(&|x| x | operand); //what if I were to go even cooler
+            self.cpu_state.set_flags(acc | op == 0, false, true, false);
+            acc | op
         }
-        pub fn cp(&mut self) {
+        pub fn cp(&mut self, acc: u8, op: u8) -> u8 {
+            //OP1 is Accumulate
             //info!("CPU OP: Compare");
-            let operand = self.alu_operand();
-            let acc = self.cpu_state.get_acc();
             //info!("Operand:{:?}",operand);
-            self.cpu_state.set_flag(Flag::Zero, acc == operand);
+            self.cpu_state.set_flag(Flag::Zero, acc == op);
             self.cpu_state.set_flag(Flag::Neg, true);
             self.cpu_state
-                .set_flag(Flag::HalfCarry, (acc & 0x0F) < (operand & 0x0F));
-            self.cpu_state.set_flag(Flag::Carry, operand > acc);
+                .set_flag(Flag::HalfCarry, (acc & 0x0F) < (op & 0x0F));
+            self.cpu_state.set_flag(Flag::Carry, op > acc);
+            acc
         }
-
+        pub fn sla(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: Shift left into carry");
+            self.cpu_state
+                .set_flags(op == 128 || op == 0, false, false, op > 127);
+            op << 1
+        }
+        pub fn sra(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: Shift right into carry");
+            self.cpu_state
+                .set_flags(op == 1 || op == 0, false, false, op % 2 == 1);
+            //Sneaky little arithmetic right shift.
+            (op >> 1) + (128 * ((op > 127) as u8))
+        }
+        pub fn srl(&mut self, op: u8) -> u8 {
+            self.cpu_state.set_flags(op < 2, false, false, op % 2 == 1);
+            op >> 1
+        }
+        pub fn swap(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: Swap nibbles");
+            self.cpu_state.set_flags(op == 0, false, false, false);
+            op.rotate_left(4)
+        }
+        pub fn bit(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: CHECK BIT");
+            let bits: u8 = (self.instruction_register & 63) >> 3;
+            self.cpu_state.set_flag(Flag::Zero, ((op >> bits) % 2) == 0);
+            self.cpu_state.set_flag(Flag::Neg, false);
+            self.cpu_state.set_flag(Flag::HalfCarry, true); //???x
+            op
+        }
+        pub fn res(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: RESET BIT");
+            let bits: u8 = (self.instruction_register & 0x3F) >> 3;
+            op & !(1 << bits)
+        }
+        pub fn set(&mut self, op: u8) -> u8 {
+            //info!("CPU OP: SET BIT");
+            let bits: u8 = (self.instruction_register & 0x3F) >> 3;
+            op | (1 << bits)
+        }
         pub fn ret(&mut self) {
             //info!("CPU OP: Return");
-            let instruction = self.cpu_state.get_r16_memory_word(DoubleReg::SP);
-            //info!("Return pointer:{:?}",instruction);
-            self.cpu_state.set_r16_val(DoubleReg::PC, instruction);
+            let instruction = self.cpu_state.get_r16_mem_16(DoubleReg::SP);
+            //info!("Return pointer:{:X?}",instruction);
+            self.cpu_state.set_r16(DoubleReg::PC, instruction);
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x + 2);
         }
         pub fn ret_cond(&mut self) {
             //info!("CPU OP: Return conditional");
             if self.cond() {
-                let instruction = self.cpu_state.get_r16_memory_word(DoubleReg::SP);
-                self.cpu_state.set_r16_val(DoubleReg::PC, instruction);
+                let instruction = self.cpu_state.get_r16_mem_16(DoubleReg::SP);
+                self.cpu_state.set_r16(DoubleReg::PC, instruction);
                 self.cpu_state.change_r16(DoubleReg::SP, &|x| x + 2);
-                self.extra_waiting = true;
+                //self.extra_waiting = true;
             }
         }
         pub fn reti(&mut self) {
             //info!("CPU OP: Return, Enable Interrupts");
-            let instruction = self.cpu_state.get_r16_memory_word(DoubleReg::SP);
-            self.cpu_state.set_r16_val(DoubleReg::PC, instruction);
+            let instruction = self.cpu_state.get_r16_mem_16(DoubleReg::SP);
+            self.cpu_state.set_r16(DoubleReg::PC, instruction);
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x + 2);
-            self.ei();
+
+            self.ime_flag = match self.ime_flag {
+                InterruptState::Disabled => InterruptState::EnableInterrupt,
+                InterruptState::AlmostEnabled | InterruptState::Enabled => InterruptState::Enabled,
+                InterruptState::EnableInterrupt => unreachable!(),
+                InterruptState::DisableInterrupt => unreachable!(),
+            }
         }
         //Jumps
         pub fn jr_imm(&mut self) {
             //Jump Relative
 
             //info!("CPU OP: Jump Relative");
-            let imm = self.cpu_state.get_imm8() as i8;
+            let imm = self.cpu_state.get_simm8() as i8;
             let pc = self.cpu_state.get_r16_val(DoubleReg::PC);
+
+          
             self.cpu_state.set_pc(pc.wrapping_add_signed(imm.into()));
         }
         pub fn jr_cond(&mut self) {
             //info!("CPU OP: Jump Conditional Relative");
             if self.cond() {
                 self.jr_imm();
-                self.extra_waiting = true;
-            }else{
-               self.cpu_state.get_imm8();
+            } else {
+                self.cpu_state.inc_pc();
             }
-        }
-
-        pub fn jp_imm(&mut self) {
-            //info!("CPU OP: Jump to IMM8");
-            let imm: u16 = self.cpu_state.get_imm16();
-            self.cpu_state.set_r16_val(DoubleReg::PC, imm);
         }
         pub fn jp_cond_imm(&mut self) {
-            //info!("CPU OP: Jump Conditional To IMM8");
+            //info!("CPU OP: Jump Conditional To IMM16");
+            let imm: u16 = self.cpu_state.get_imm16();
             if self.cond() {
-                self.jp_imm();
-                self.extra_waiting = true;
-            }else{
-               self.cpu_state.get_imm16();
-            }
-        }
-        pub fn jp_hl(&mut self) {
-            //info!("CPU OP:Jump HL");
-            let hl: u16 = self.cpu_state.get_r16_val(DoubleReg::HL);
-            self.cpu_state.set_r16_val(DoubleReg::PC, hl)
+                self.cpu_state.set_pc(imm);
+            } 
         }
         pub fn call_cond(&mut self) {
             //info!("CPU OP: Cond Call");
             if self.cond() {
                 self.call_imm();
-                self.extra_waiting = true;
-            }else{ 
-                self.cpu_state.get_imm16();
+            } else {
+                self.cpu_state.inc_pc();
+                self.cpu_state.inc_pc();
             }
         }
         pub fn call_imm(&mut self) {
             //info!("CPU OP: Call IMM");
             //thread::sleep(time::Duration::from_secs(2));
-
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x - 2);
             let addr = self.cpu_state.get_imm16();
             let pc = self.cpu_state.get_r16_val(DoubleReg::PC);
-            self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
-            self.cpu_state.set_pc(addr);
+            self.cpu_state.set_r16_mem_16(DoubleReg::SP, pc);
+            self.cpu_state.set_pc(addr-1); //This fixed a call bug
         }
         pub fn rst(&mut self) {
             //info!("OP: RST");
             //dbg!("OP: RST");
             let pc: u16 = self.cpu_state.get_r16_val(DoubleReg::PC);
-            self.cpu_state.set_r16_memory(DoubleReg::SP, pc);
+            self.cpu_state.set_r16(DoubleReg::SP, pc);
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x - 2);
             self.cpu_state
-                .set_pc(((self.instruction_register & 0x38)-1) as u16);
+                .set_pc(((self.instruction_register & 0x38) - 1) as u16);
         }
         pub fn pop(&mut self) {
             //info!("CPU OP: POP");
-
             let operand = self.cpu_state.r16_stk_tbl(self.instruction_register);
             let stack_pointer = self.cpu_state.get_r16_val(DoubleReg::SP);
-            let instruction = self.cpu_state.get_half_word(stack_pointer);
+            let instruction = self.cpu_state.get_mem_16(stack_pointer);
             //info!("{:X?}",instruction);
             //thread::sleep(Duration::from_secs(5));
-            self.cpu_state.set_r16_val(operand, instruction);
+            self.cpu_state.set_r16(operand, instruction);
             self.cpu_state.change_r16(DoubleReg::SP, &|x| x + 2);
         }
         pub fn push(&mut self) {
@@ -668,15 +700,15 @@ pub mod cpu {
             //info!("PUSH VAL {:X?}",value);
 
             let stack_pointer = self.cpu_state.get_r16_val(DoubleReg::SP);
-            self.cpu_state.set_half_word(stack_pointer, value);
+            self.cpu_state.set_mem_16(stack_pointer, value);
             //thread::sleep(Duration::from_secs(5));
         }
         pub fn add_sp_imm8(&mut self) {
-
             //info!("CPU OP: SP=SP+imm8");
-            let operand: i8 = self.cpu_state.get_imm8() as i8;
-            //self.cpu_state.set_flag(Flag::Carry, None == acc.checked_add(operand) );
-            //self.cpu_state.set_flag(Flag::HalfCarry, ((acc & 0x0F) + (operand & 0x0F)) > 0x10 );
+            let acc = self.cpu_state.get_r16_val(DoubleReg::SP);
+            let operand: i8 = self.cpu_state.get_simm8();
+            self.cpu_state.set_flag(Flag::Carry, acc.checked_add_signed(operand as i16).is_none() );
+            //self.cpu_state.set_flag(Flag::HalfCarry, ((acc & 0x000F).saturating_add(operand & 0x0F)) > 0x10 );
             self.cpu_state.set_flag(Flag::Neg, false);
             self.cpu_state.set_flag(Flag::Zero, false);
             self.cpu_state
@@ -703,68 +735,7 @@ pub mod cpu {
                 InterruptState::DisableInterrupt => unreachable!(),
             }
         }
-        pub fn sla(&mut self) {
-
-            //info!("CPU OP: Shift left into carry");
-            let reg = self.cpu_state.get_r8_end(self.instruction_register);
-            let operand = self.cpu_state.get_r8_val(reg);
-            self.cpu_state
-                .set_flags(operand == 128 || operand == 0, false, false, operand > 127);
-            self.cpu_state.change_r8(reg, &|x| x << 1);
-        }
-        pub fn sra(&mut self) {
-
-            //info!("CPU OP: Shift right into carry");
-            let reg = self.cpu_state.get_r8_end(self.instruction_register);
-            let operand = self.cpu_state.get_r8_val(reg);
-            self.cpu_state
-                .set_flags(operand == 1 || operand == 0, false, false, operand % 2 == 1);
-            self.cpu_state
-                .change_r8(reg, &|x| (x >> 1) + (128 * ((x > 127) as u8))); //Sneaky little arithmetic right shift.
-        }
-        pub fn srl(&mut self) {
-
-            //info!("CPU OP: Shift right(logical)");
-            let reg = self.cpu_state.get_r8_end(self.instruction_register);
-            let operand = self.cpu_state.get_r8_val(reg);
-            self.cpu_state
-                .set_flags(operand == 1 || operand == 0, false, false, operand % 2 == 1);
-            self.cpu_state.change_r8(reg, &|x| (x >> 1));
-        }
-        pub fn swap(&mut self) {
-
-            //info!("CPU OP: Swap nibbles");
-            let reg = self.cpu_state.get_r8_end(self.instruction_register);
-            let operand = self.cpu_state.get_r8_val(reg);
-            self.cpu_state.set_flags(operand == 0, false, false, false);
-            self.cpu_state.change_r8(reg, &|x: u8| x.rotate_left(4));
-        }
-        pub fn bit(&mut self) {
-            //info!("CPU OP: CHECK BIT");
-            let bits: u8 = (self.instruction_register & 63) >> 3;
-            //info!("WE CHECK BIT {:?}", bits);
-            let reg: SingleReg = self.cpu_state.get_r8_end(self.instruction_register);
-            let val: u8 = self.cpu_state.get_r8_val(reg);
-            //info!("ZERO FLAG?{:?}", ((val >> bits) % 2) == 0);
-            self.cpu_state
-                .set_flag(Flag::Zero, ((val >> bits) % 2) == 0);
-            self.cpu_state.set_flag(Flag::Neg, false);
-            self.cpu_state.set_flag(Flag::HalfCarry, true); //???x
-        }
-        pub fn res(&mut self) {
-
-            //info!("CPU OP: RESET BIT");
-            let bits: u8 = (self.instruction_register & 63) >> 3;
-            let reg: SingleReg = self.cpu_state.get_r8_end(self.instruction_register);
-            self.cpu_state.change_r8(reg, &|x| !(x & (1 << bits)));
-        }
-        pub fn set(&mut self) {
-
-            //info!("CPU OP: SET BIT");
-            let bits: u8 = (self.instruction_register & 63) >> 3;
-            let reg: SingleReg = self.cpu_state.get_r8_end(self.instruction_register);
-            self.cpu_state.change_r8(reg, &|x| x | 1 << bits);
-        }
+        
         pub fn stop(&mut self) {
             //No official rom uses stop, so we're using the stop flag for halt instead
             self.stopped = true;
@@ -773,24 +744,6 @@ pub mod cpu {
             //We need to implement the halt bug where we repeat the PC counter.
             self.stopped = true;
             self.ime_flag = InterruptState::Enabled;
-        }
-
-        pub fn interrupt(&mut self, interrupt: Interrupt) {
-            //info!("Hanle interrupts Interrupts");
-            match self.ime_flag {
-                InterruptState::Enabled | InterruptState::DisableInterrupt => (),
-                _ => return (),
-            };
-            let bit_idx: u8 = match interrupt {
-                Interrupt::VBlank => 0,
-                Interrupt::LCDC => 1,
-                Interrupt::Timer => 2,
-                Interrupt::Serial => 3,
-                Interrupt::Input => 4,
-            };
-            let mut current_interrupt_flag: u8 = self.cpu_state.get_byte(0xFF0F);
-            current_interrupt_flag |= 1 << bit_idx;
-            self.cpu_state.set_byte(0xFF0F, current_interrupt_flag);
         }
     }
 }

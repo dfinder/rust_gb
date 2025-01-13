@@ -1,7 +1,6 @@
 pub mod cpu_state {
     use std::{cell::RefCell, fs::File, rc::Rc};
 
-    use log::info;
     use sdl2::{render::Canvas, video::Window};
 
     use crate::{
@@ -17,7 +16,7 @@ pub mod cpu_state {
     }
     impl CpuState {
         pub fn new(
-            joypad: Rc<RefCell<Joypad>>,
+            joypad: Joypad,
             audio_con: AudioController,
             wait_ref: Rc<RefCell<u8>>,
             canvas: Canvas<Window>,
@@ -28,12 +27,11 @@ pub mod cpu_state {
                 registers: RegStruct::new(),
             }
         }
-        //pub fn get_bit(&mut self, )
         pub fn get_r8_mid(&mut self, opcode: u8) -> SingleReg {
             self.get_r8_end(opcode >> 3)
         }
         pub fn get_r8_end(&mut self, opcode: u8) -> SingleReg {
-            let ret = match opcode % 8 {
+            match opcode % 8 {
                 0 => SingleReg::B,
                 1 => SingleReg::C,
                 2 => SingleReg::D,
@@ -43,9 +41,7 @@ pub mod cpu_state {
                 6 => SingleReg::Memptr,
                 7 => SingleReg::A,
                 _ => unreachable!(),
-            };
-            //info!("Register used is {:?}", ret);
-            ret
+            }
         }
         pub fn r16_tbl(&mut self, opcode: u8) -> DoubleReg {
             let ret = match (opcode >> 4) % 4 {
@@ -55,18 +51,17 @@ pub mod cpu_state {
                 3 => DoubleReg::SP,
                 _ => unreachable!(),
             };
-            //info!("Table Register used is {:?}", ret);
+            //dbg!(ret);
             ret
         }
         pub fn r16_stk_tbl(&mut self, opcode: u8) -> DoubleReg {
-            let ret =match (opcode >> 4) % 4 {
+            let ret = match (opcode >> 4) % 4 {
                 0 => DoubleReg::BC,
                 1 => DoubleReg::DE,
                 2 => DoubleReg::HL,
                 3 => DoubleReg::AF,
                 _ => unreachable!(),
             };
-            //info!("Table Register used is {:?}", ret);
             ret
         }
         pub fn r16_mem_tbl(&mut self, opcode: u8) -> DoubleReg {
@@ -81,7 +76,6 @@ pub mod cpu_state {
         pub fn inc_pc(&mut self) -> u16 {
             self.registers.inc_pc(1)
         }
-
         pub fn get_pc(&mut self) -> u16 {
             self.registers.get_r16(DoubleReg::PC)
         }
@@ -92,16 +86,16 @@ pub mod cpu_state {
             self.registers.set_r8(SingleReg::A, val, &mut self.memory)
         }
         pub fn set_pc(&mut self, val: u16) {
-            self.registers.set_r16(DoubleReg::PC, val, &mut self.memory);
+            self.registers.set_r16(DoubleReg::PC, val);
         }
         pub fn change_r8(&mut self, reg: SingleReg, fun: &dyn Fn(u8) -> u8) -> u8 {
-            let val: u8 = fun(self.registers.get_r8(reg, &mut self.memory));
+            let val: u8 = fun(self.get_r8_val(reg));
             self.registers.set_r8(reg, val, &mut self.memory);
             val
         }
         pub fn change_r16(&mut self, reg: DoubleReg, fun: &dyn Fn(u16) -> u16) -> u16 {
             let val: u16 = fun(self.registers.get_r16(reg));
-            self.registers.set_r16(reg, val, &mut self.memory);
+            self.registers.set_r16(reg, val);
             val
         }
         /*pub fn get_r16_mem_direct(&mut self,opcode: u8)->u8{
@@ -118,16 +112,19 @@ pub mod cpu_state {
         pub fn set_r8(&mut self, reg: SingleReg, val: u8) {
             self.registers.set_r8(reg, val, &mut self.memory)
         }
-        pub fn set_r16_val(&mut self, reg: DoubleReg, val: u16) {
-            self.registers.set_r16(reg, val, &mut self.memory)
+        pub fn set_r16(&mut self, reg: DoubleReg, val: u16) {
+            self.registers.set_r16(reg, val)
         }
-        pub fn set_r16_memory(&mut self, reg: DoubleReg, val: u16) {
+        pub fn set_r16_mem_8(&mut self, reg: DoubleReg, val: u8) {
+            self.memory.set_memory_8(self.registers.get_r16(reg), val)
+        }
+        pub fn set_r16_mem_16(&mut self, reg: DoubleReg, val: u16) {
             self.memory.set_memory_16(self.registers.get_r16(reg), val)
         }
-        pub fn get_r16_memory(&mut self, reg: DoubleReg) -> u8 {
+        pub fn get_r16_mem_8(&mut self, reg: DoubleReg) -> u8 {
             self.memory.grab_memory_8(self.registers.get_r16(reg))
         }
-        pub fn get_r16_memory_word(&mut self, reg: DoubleReg) -> u16 {
+        pub fn get_r16_mem_16(&mut self, reg: DoubleReg) -> u16 {
             self.memory.grab_memory_16(self.registers.get_r16(reg))
         }
         pub fn get_flag(&mut self, flag: Flag) -> bool {
@@ -165,6 +162,9 @@ pub mod cpu_state {
         pub fn get_imm8(&mut self) -> u8 {
             self.memory.grab_memory_8(self.registers.inc_pc(1))
         }
+        pub fn get_simm8(&mut self) -> i8 {
+            self.memory.grab_memory_8(self.registers.inc_pc(1)) as i8
+        }
         pub fn get_imm16(&mut self) -> u16 {
             let ret: u16 = self.memory.grab_memory_16(self.registers.inc_pc(1));
             self.registers.inc_pc(1);
@@ -189,10 +189,10 @@ pub mod cpu_state {
                 self.set_flag(Flag::Carry, true);
             }
         }
-        pub fn get_half_word(&mut self, addr: u16) -> u16 {
+        pub fn get_mem_16(&mut self, addr: u16) -> u16 {
             self.memory.grab_memory_16(addr)
         }
-        pub fn set_half_word(&mut self, addr: u16, value: u16) {
+        pub fn set_mem_16(&mut self, addr: u16, value: u16) {
             self.memory.set_memory_16(addr, value)
         }
         pub fn on_clock(&mut self) {

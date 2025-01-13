@@ -116,7 +116,7 @@ pub mod vram {
 
         fn memory_write(&mut self, addr: u16, val: u8) {
             if val != 0 {
-                info!("WE WRITE TO THIS BLOCK {:X?}@{:X?}", val,addr);
+                info!("WE WRITE TO THIS BLOCK {:X?}@{:X?}", val, addr);
             }
             self.data[addr as usize] = val
         }

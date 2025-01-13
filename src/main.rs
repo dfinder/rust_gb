@@ -10,9 +10,8 @@ use std::{cell::RefCell, cmp::max, fs::File, rc::Rc, thread, time::Duration};
 use audio::audio_controller::AudioController;
 use cpu::cpu::CpuStruct;
 use joypad::joypad::Joypad;
-use sdl2::{self, event::Event, keyboard::Keycode, pixels::Color};
+use sdl2::{self, event::Event, keyboard::{Keycode, Scancode}, pixels::Color, EventPump};
 use colog;
-use sdl2_sys::KeyCode;
 fn main() {
 
     //let mut clog = colog::default_builder();
@@ -23,60 +22,52 @@ fn main() {
     let window = video_subsystem.window("Gameboy",160,144).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let gb_audio = AudioController::new(audio_subsystem);
+
+    let event_pump = sdl_context.event_pump().unwrap();
+    let wrapped_pump: Rc<RefCell<EventPump>> = Rc::new(RefCell::new(event_pump));
     let cartridge = File::open("../Mario.gb").expect("msg");
-    let mut joypad: Joypad = Joypad::new([
-        Keycode::M,
-        Keycode::N,
-        Keycode::Z,
-        Keycode::X,
-        Keycode::Down,
-        Keycode::Up,
-        Keycode::Left,
-        Keycode::Right,
-    ]);
-    let wrapped_joypad = Rc::new(RefCell::new(joypad));
+    let joypad: Joypad = Joypad::new([
+        Scancode::M,
+        Scancode::N,
+        Scancode::Z,
+        Scancode::X,
+        Scancode::Down,
+        Scancode::Up,
+        Scancode::Left,
+        Scancode::Right,
+    ],wrapped_pump.clone());
     canvas.clear();
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     canvas.present();
     let my_cpu = &mut CpuStruct::new(
-        wrapped_joypad.clone(),
+        joypad,
         gb_audio,
         canvas,
         cartridge,
     );
-    let mut clockrate = 16;
-    let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut clockrate = 256;
     'running: loop {
-        for event in event_pump.poll_iter() {
+        for event in wrapped_pump.borrow_mut().poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
                 Event::KeyDown{keycode:Some(Keycode::Comma),..}=>{
-                    clockrate = clockrate <<1 
+                    clockrate = clockrate << 1 
                 
                 }
                 Event::KeyDown{keycode:Some(Keycode::Period),..}=>{
                     clockrate = max(clockrate >>1,1)
                 }
-                Event::KeyDown {  keycode, repeat:false,.. }=>
-                {
-                    joypad.process_keystrokes(my_cpu, keycode,true);
-                    
-                }
-                Event::KeyUp{  keycode,  repeat:false,.. }=>
-                {
-                    joypad.process_keystrokes(my_cpu, keycode, false);
-                }
                 _ => {}
             }
         }
+        
         my_cpu.interpret_command();
         //thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
         //println!("{:?}", graphics_state);
         //let key_strokes:
-
     }
 }
 

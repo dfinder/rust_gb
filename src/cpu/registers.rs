@@ -3,8 +3,10 @@ pub mod registers {
     use log::info;
 
     //use crate::memory::memory::{self, MemoryStruct};
-    use crate::memory::memory_wrapper::MemWrap;
     use std::fmt::Debug;
+
+    use crate::memory::memory_wrapper::MemWrap;
+
     #[derive(Copy, Clone, Debug)]
     pub enum SingleReg {
         A,
@@ -59,10 +61,10 @@ pub mod registers {
                     "F",
                     &format!(
                         "[Z:{},N:{},HC:{},C:{}]",
-                        (&self.f >> 7 == 1) as u8,
-                        (&self.f & 0x40 >> 6 == 1) as u8,
-                        (&self.f & 0x20 >> 5 == 1) as u8,
-                        ((&self.f & 0x10 >> 4) == 1) as u8
+                        ((&self.f >> 7) == 1) as u8,
+                        (((&self.f & 0x40) >> 6) == 1) as u8,
+                        (((&self.f & 0x20) >> 5) == 1) as u8,
+                        (((&self.f & 0x10) >> 4) == 1) as u8
                     ),
                 )
                 .field("H", &format!("{:X?}", &self.h))
@@ -132,8 +134,7 @@ pub mod registers {
                 SingleReg::L => self.l = val,
             }
         }
-        pub fn set_r16(&mut self, reg: DoubleReg, val: u16, memory: &mut MemWrap) {
-            let glue = |x: u8, y: u8| x as u16 * 0x100 + y as u16;
+        pub fn set_r16(&mut self, reg: DoubleReg, val: u16) {
             match reg {
                 DoubleReg::AF => panic!("We can't set F from Double Set"),
                 DoubleReg::BC => {
@@ -148,31 +149,36 @@ pub mod registers {
                     self.h = (val >> 8) as u8;
                     self.l = val as u8;
                 }
-                DoubleReg::HLP => {
+                DoubleReg::HLP => panic!("This doesn't work like how we want it to"),
+                /* {
+
                     let mut addr = glue(self.h, self.l);
                     memory.set_memory_16(addr, val);
                     addr += 1;
                     self.h = (addr >> 8) as u8;
                     self.l = addr as u8;
-                }
-                DoubleReg::HLM => {
-                    let mut addr = glue(self.h, self.l);
-                    memory.set_memory_16(addr, val);
-                    addr -= 1;
-                    self.h = (addr >> 8) as u8;
-                    self.l = addr as u8;
-                }
+                } */
+                DoubleReg::HLM => panic!("This doesn't work like how we want it to"), /*
+                let mut addr = glue(self.h, self.l);
+                memory.set_memory_16(addr, val);
+                addr -= 1;
+                self.h = (addr >> 8) as u8;
+                self.l = addr as u 8;
+                }*/
                 DoubleReg::SP => self.sp = val,
                 DoubleReg::PC => self.pc = val,
             }
         }
         pub fn set_flag(&mut self, flag: Flag) {
+
+            //dbg!(self.f);
             self.f |= match flag {
                 Flag::Zero => 128,
                 Flag::Neg => 64,
                 Flag::HalfCarry => 32,
                 Flag::Carry => 16,
-            }
+            };
+            //dbg!(self.f);
         }
 
         pub fn flag_cond(&mut self, flag: Flag, b: bool) {
@@ -212,9 +218,9 @@ pub mod registers {
             self.set_r8(reg, result, mem);
             result
         }
-        pub fn change_r16(&mut self, reg: DoubleReg, fun: &dyn Fn(u16) -> u16, mem: &mut MemWrap) {
+        pub fn change_r16(&mut self, reg: DoubleReg, fun: &dyn Fn(u16) -> u16) {
             let result = fun(self.get_r16(reg));
-            self.set_r16(reg, result, mem);
+            self.set_r16(reg, result);
         }
         /**pub fn apply_fun_to_reg(&mut self, reg:SingleReg,fun: &dyn Fn(u8)->u8){
             let acc:u8 = self.get_r8(SingleReg::A);

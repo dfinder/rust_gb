@@ -1,9 +1,12 @@
 pub mod joypad {
 
-    use sdl2::keyboard::Keycode;
+    use std::{cell::RefCell, rc::Rc};
+
+    use sdl2::{keyboard::Scancode, EventPump};
+
+    use crate::cpu::interrupt::interrupt::Interrupt;
  
 
-    use crate::cpu::{cpu::CpuStruct, interrupt::interrupt::Interrupt};
     #[derive(Clone, Copy, Debug
     )]
     enum GBKey {
@@ -19,16 +22,17 @@ pub mod joypad {
     #[derive(Clone, Copy)]
     struct KeyWrapper {
         v_key: GBKey,
-        p_key: Keycode,
+        p_key: Scancode,
         state: bool,
         //time: u32
     }
-    #[derive(Clone, Copy)]
     pub struct Joypad {
         mapping: [KeyWrapper; 8],
+        sdl_handler:Rc<RefCell<EventPump>>,
+        joypad_state:u8
     }
     impl Joypad {
-        pub fn new(map: [Keycode; 8]) -> Self {
+        pub fn new(map: [Scancode; 8],sdl_handler: Rc<RefCell<EventPump>>) -> Self {
             let start: KeyWrapper = KeyWrapper {
                 v_key: GBKey::Start,
                 p_key: map[0],
@@ -71,10 +75,10 @@ pub mod joypad {
                 state: false,
             };
             return Joypad {
-                mapping: [start, select, b, a, down, up, left, right],
+                mapping: [start, select, b, a, down, up, left, right],sdl_handler,joypad_state:0
             };
         }
-        pub fn process_keystrokes(
+        /* pub fn process_keystrokes(
             &mut self,
             cpu: &mut CpuStruct,
             key_event: Option<Keycode>,
@@ -96,23 +100,41 @@ pub mod joypad {
                     None => ()
                 }
             
+        } */
+        pub fn on_clock(&mut self)->Option<Interrupt>{
+            let mut ret = None;
+            let handler = self.sdl_handler.borrow_mut();
+            let keyboard_state = handler.keyboard_state();
+            for mut i in self.mapping{
+                let is_pressed = keyboard_state.is_scancode_pressed(i.p_key);
+                if ret.is_none() && i.state != is_pressed {
+                    ret = Some(Interrupt::Input);
+                }
+                i.state = is_pressed
+
+            }
+            ret 
+
         }
-        pub fn set_key_stroke_nibble(self, current_val: u8) -> u8 {
-            let mut initial_index: usize = 0;
-            let mut nibble: u8 = current_val;
-            if current_val >= 0x30 {
-                //Figure out what to do if both are set.
-                return current_val | 0x0F;
+        pub fn set_key_stroke_nibble(&mut self) -> u8 {
+            self.joypad_state=self.joypad_state | 0x0F; //We clear the lower nibble
+            if self.joypad_state < 0x30 {
+                let mut initial_index: usize = 0;
+                if (self.joypad_state & 0x10) > 0 {
+                    //Fetch DPad on bit 4.
+                    initial_index = 4
+                } 
+                for i in 0..4 {
+                    self.joypad_state &= (!self.mapping[i + initial_index].state as u8) * (1 << (4 - i));
+                }
             }
-            if (current_val & 0x10) > 0 {
-                //Fetch DPad on bit 4.
-                initial_index = 4
-            } //
-            nibble |= 0x0F;
-            for i in 0..4 {
-                nibble &= (!self.mapping[i + initial_index].state as u8) * (1 << (4 - i));
-            }
-            return nibble;
+            return self.joypad_state;
+        }
+        pub fn read(&mut self) -> u8 {
+            self.set_key_stroke_nibble()
+        }
+        pub fn write(&mut self, val: u8) {
+            self.joypad_state = val & 0x30
         }
         //fn hit_list()This also occurs during a speed switch. (TODO: how is it affected by the wait after a speed switch?)
     }

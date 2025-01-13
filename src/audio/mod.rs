@@ -8,9 +8,12 @@
 
 pub mod audio_controller {
 
+    use log::info;
     use sdl2::audio::{AudioQueue, AudioSpecDesired};
 
     use crate::memory::memory_wrapper::AsMemory;
+
+
 
     pub struct AudioController {
         pub audio_channel1: SquareSweep,  //FF10
@@ -87,6 +90,7 @@ pub mod audio_controller {
                     _ => ()
                 }
             }
+            //info!("{:X?}",addr);
             match addr {
                 0x0000..=0x0005 => self.audio_channel1.memory_write(addr, val),
                 0x0006..=0x0009 => self.audio_channel2.memory_write(addr - 0x006, val),
