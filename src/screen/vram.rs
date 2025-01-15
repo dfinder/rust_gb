@@ -128,7 +128,7 @@ pub mod vram {
         pub fn get_tile(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
-                ret[i] = Vobj::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
+                ret[i] = Self::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
             }
             return ret.map(|x| Self::color_palette(x));
         }
