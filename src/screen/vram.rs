@@ -135,7 +135,7 @@ pub mod vram {
         pub fn get_tile_backwards(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
-                ret[i] = Vobj::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
+                ret[i] = Self::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
             }
             let mut ret_tile = ret.map(|x| Self::color_palette_reverse(x));
             ret_tile.reverse();
