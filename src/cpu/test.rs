@@ -14,7 +14,7 @@ mod tests {
 
     #[test]
     fn test_1() {
-        let mut testing_gb = test_setup("test1.gb");
+        let mut testing_gb = test_setup("./Mario.gb");
         testing_gb.test_init();
     }
     fn test_setup(path: &str) -> CpuStruct {
@@ -31,7 +31,7 @@ mod tests {
         let event_pump = sdl_context.event_pump().unwrap();
         let wrapped_pump: Rc<RefCell<EventPump>> = Rc::new(RefCell::new(event_pump));
 
-        let cartridge = File::open("./tests/test_1.gb").expect("msg");
+        let cartridge = File::open("./Mario.gb").expect("msg");
         let joypad: Joypad = Joypad::new(
             [
                 Scancode::M,

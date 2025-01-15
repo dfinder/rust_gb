@@ -1,18 +1,25 @@
 pub mod cpu_state {
-    use std::{cell::RefCell, fs::File, rc::Rc};
-
-    use sdl2::{render::Canvas, video::Window};
-
     use crate::{
-        audio::audio_controller::AudioController,
-        cpu::registers::registers::{DoubleReg, Flag, RegStruct, SingleReg},
-        joypad::joypad::Joypad,
+        audio::audio_controller::AudioController, joypad::joypad::Joypad,
         memory::memory_wrapper::MemWrap,
     };
+    use log::info;
+    use sdl2::{render::Canvas, video::Window};
+    use std::fmt::Debug;
+    use std::{cell::RefCell, fs::File, rc::Rc};
 
     pub struct CpuState {
         memory: MemWrap,
-        pub registers: RegStruct,
+        a: u8,
+        b: u8,
+        c: u8,
+        d: u8,
+        e: u8,
+        f: u8,
+        h: u8,
+        l: u8,
+        sp: u16,
+        pc: u16,
     }
     impl CpuState {
         pub fn new(
@@ -24,11 +31,17 @@ pub mod cpu_state {
         ) -> Self {
             Self {
                 memory: MemWrap::new(joypad, audio_con, canvas, wait_ref, cartridge),
-                registers: RegStruct::new(),
+                a: 0x00,
+                b: 0x00,
+                c: 0x00,
+                d: 0x00,
+                e: 0x00,
+                f: 0x00,
+                h: 0x00,
+                l: 0x00,
+                sp: 0x0000,
+                pc: 0x0000,
             }
-        }
-        pub fn get_r8_mid(&mut self, opcode: u8) -> SingleReg {
-            self.get_r8_end(opcode >> 3)
         }
         pub fn get_r8_end(&mut self, opcode: u8) -> SingleReg {
             match opcode % 8 {
@@ -51,18 +64,16 @@ pub mod cpu_state {
                 3 => DoubleReg::SP,
                 _ => unreachable!(),
             };
-            //dbg!(ret);
             ret
         }
         pub fn r16_stk_tbl(&mut self, opcode: u8) -> DoubleReg {
-            let ret = match (opcode >> 4) % 4 {
+            match (opcode >> 4) % 4 {
                 0 => DoubleReg::BC,
                 1 => DoubleReg::DE,
                 2 => DoubleReg::HL,
                 3 => DoubleReg::AF,
                 _ => unreachable!(),
-            };
-            ret
+            }
         }
         pub fn r16_mem_tbl(&mut self, opcode: u8) -> DoubleReg {
             match (opcode >> 4) % 4 {
@@ -74,84 +85,58 @@ pub mod cpu_state {
             }
         }
         pub fn inc_pc(&mut self) -> u16 {
-            self.registers.inc_pc(1)
+            self.pc += 1 as u16;
+            self.pc
         }
         pub fn get_pc(&mut self) -> u16 {
-            self.registers.get_r16(DoubleReg::PC)
+            self.pc
         }
-        pub fn get_acc(&mut self) -> u8 {
-            self.registers.get_r8(SingleReg::A, &mut self.memory)
-        }
-        pub fn set_acc(&mut self, val: u8) {
-            self.registers.set_r8(SingleReg::A, val, &mut self.memory)
-        }
-        pub fn set_pc(&mut self, val: u16) {
-            self.registers.set_r16(DoubleReg::PC, val);
-        }
-        pub fn change_r8(&mut self, reg: SingleReg, fun: &dyn Fn(u8) -> u8) -> u8 {
-            let val: u8 = fun(self.get_r8_val(reg));
-            self.registers.set_r8(reg, val, &mut self.memory);
-            val
-        }
-        pub fn change_r16(&mut self, reg: DoubleReg, fun: &dyn Fn(u16) -> u16) -> u16 {
-            let val: u16 = fun(self.registers.get_r16(reg));
-            self.registers.set_r16(reg, val);
-            val
-        }
-        /*pub fn get_r16_mem_direct(&mut self,opcode: u8)->u8{
-            let reg:DoubleReg = self.r16_mem_tbl(opcode);
-            let addr:u16 = self.get_r16_val(reg);
-            self.memory.grab_memory_8(addr)
-        }*/
-        pub fn get_r8_val(&mut self, reg: SingleReg) -> u8 {
-            self.registers.get_r8(reg, &mut self.memory)
-        }
-        pub fn get_r16_val(&mut self, reg: DoubleReg) -> u16 {
-            self.registers.get_r16(reg)
-        }
-        pub fn set_r8(&mut self, reg: SingleReg, val: u8) {
-            self.registers.set_r8(reg, val, &mut self.memory)
-        }
-        pub fn set_r16(&mut self, reg: DoubleReg, val: u16) {
-            self.registers.set_r16(reg, val)
+        pub fn set_pc(&mut self, amount: u16) {
+            self.pc = amount;
         }
         pub fn set_r16_mem_8(&mut self, reg: DoubleReg, val: u8) {
-            self.memory.set_memory_8(self.registers.get_r16(reg), val)
+            let reg_val = self.get_r16(reg);
+            self.memory.set_memory_8(reg_val, val)
         }
         pub fn set_r16_mem_16(&mut self, reg: DoubleReg, val: u16) {
-            self.memory.set_memory_16(self.registers.get_r16(reg), val)
+            let reg_val = self.get_r16(reg);
+            self.memory.set_memory_16(reg_val, val)
         }
         pub fn get_r16_mem_8(&mut self, reg: DoubleReg) -> u8 {
-            self.memory.grab_memory_8(self.registers.get_r16(reg))
+            let addr = self.get_r16(reg);
+            self.memory.grab_memory_8(addr)
         }
         pub fn get_r16_mem_16(&mut self, reg: DoubleReg) -> u16 {
-            self.memory.grab_memory_16(self.registers.get_r16(reg))
+            let addr = self.get_r16(reg);
+            self.memory.grab_memory_16(addr)
+        }
+        pub fn pop(&mut self)->u16{
+            
+            let value = self.get_r16_mem_16(DoubleReg::SP);
+            self.sp=self.sp+2;
+            info!("POPPING {:?}",value);
+            return value
+        }
+        pub fn push(&mut self,val: u16){
+
+            info!("PUSHING {:?}",val);
+            self.sp=self.sp-2;
+            self.set_r16_mem_16(DoubleReg::SP, val);
         }
         pub fn get_flag(&mut self, flag: Flag) -> bool {
-            let flag_reg = self.registers.get_r8(SingleReg::F, &mut self.memory);
             match flag {
-                Flag::Zero => (flag_reg & 0x80) == 0x80,
-                Flag::Neg => (flag_reg & 0x40) == 0x40,
-                Flag::HalfCarry => (flag_reg & 0x20) == 0x20,
-                Flag::Carry => (flag_reg & 0x10) == 0x10,
+                Flag::Zero => (self.f & 0x80) == 0x80,
+                Flag::Neg => (self.f & 0x40) == 0x40,
+                Flag::HalfCarry => (self.f & 0x20) == 0x20,
+                Flag::Carry => (self.f & 0x10) == 0x10,
             }
         }
-        pub fn set_flag(&mut self, flag: Flag, state: bool) {
+        pub fn mark_flag(&mut self, flag: Flag, state: bool) {
             if state {
-                self.registers.set_flag(flag);
+                self.set_flag(flag);
             } else {
-                self.registers.unset_flag(flag);
+                self.unset_flag(flag);
             }
-        }
-        pub fn set_flags(&mut self, zero: bool, neg: bool, hc: bool, carry: bool) {
-            self.set_flag(Flag::Zero, zero);
-            self.set_flag(Flag::Neg, neg);
-            self.set_flag(Flag::HalfCarry, hc);
-            self.set_flag(Flag::Carry, carry);
-        }
-        pub fn apply_fun_to_acc(&mut self, fun: &dyn Fn(u8) -> u8) -> u8 {
-            self.registers
-                .change_r8(SingleReg::A, fun, &mut self.memory)
         }
         pub fn set_byte(&mut self, addr: u16, val: u8) {
             self.memory.set_memory_8(addr, val)
@@ -160,33 +145,26 @@ pub mod cpu_state {
             self.memory.grab_memory_8(addr)
         }
         pub fn get_imm8(&mut self) -> u8 {
-            self.memory.grab_memory_8(self.registers.inc_pc(1))
+            let pc = self.inc_pc();
+            self.memory.grab_memory_8(pc)
         }
         pub fn get_simm8(&mut self) -> i8 {
-            self.memory.grab_memory_8(self.registers.inc_pc(1)) as i8
+            let pc = self.inc_pc();
+            self.memory.grab_memory_8(pc) as i8
         }
         pub fn get_imm16(&mut self) -> u16 {
-            let ret: u16 = self.memory.grab_memory_16(self.registers.inc_pc(1));
-            self.registers.inc_pc(1);
+            let pc = self.inc_pc();
+            let ret: u16 = self.memory.grab_memory_16(pc);
+            self.inc_pc();
             return ret;
         }
-        pub fn get_cond(&mut self, opcode: u8) -> bool {
-            //info!("WE'RE ASSESSING CONDITION {:?} ", (opcode >> 4) % 4);
-            match (opcode >> 3) % 4 {
-                0 => !self.get_flag(Flag::Zero),
-                1 => self.get_flag(Flag::Zero),
-                2 => !self.get_flag(Flag::Carry),
-                3 => self.get_flag(Flag::Carry),
-                _ => unreachable!(),
-            }
-        }
         pub fn flip_carry(&mut self) {
-            self.set_flag(Flag::Neg, false);
-            self.set_flag(Flag::HalfCarry, false);
+            self.mark_flag(Flag::Neg, false);
+            self.mark_flag(Flag::HalfCarry, false);
             if self.get_flag(Flag::Carry) {
-                self.set_flag(Flag::Carry, false);
+                self.mark_flag(Flag::Carry, false);
             } else {
-                self.set_flag(Flag::Carry, true);
+                self.mark_flag(Flag::Carry, true);
             }
         }
         pub fn get_mem_16(&mut self, addr: u16) -> u16 {
@@ -198,5 +176,171 @@ pub mod cpu_state {
         pub fn on_clock(&mut self) {
             self.memory.on_clock();
         }
+        pub fn get_acc(&mut self) -> u8 {
+            self.a
+        }
+        pub fn set_acc(&mut self, val: u8) {
+            self.a = val
+        }
+        pub fn get_r8(&mut self, reg: SingleReg) -> u8 {
+            match reg {
+                SingleReg::A => self.a,
+                SingleReg::B => self.b,
+                SingleReg::C => self.c,
+                SingleReg::D => self.d,
+                SingleReg::E => self.e,
+                SingleReg::F => self.f,
+                SingleReg::H => self.h,
+                SingleReg::Memptr => {
+                    let addr = self.get_r16(DoubleReg::HL);
+                    self.memory.grab_memory_8(addr)
+                }
+                SingleReg::L => self.l,
+            }
+        }
+        pub fn get_r16(&mut self, reg: DoubleReg) -> u16 {
+            let glue = |x: u8, y: u8| x as u16 * 0x100 + y as u16;
+            match reg {
+                DoubleReg::AF => glue(self.a, self.f),
+                DoubleReg::BC => glue(self.b, self.c),
+                DoubleReg::DE => glue(self.d, self.e),
+                DoubleReg::HL => glue(self.h, self.l),
+                DoubleReg::HLP => {
+                    let mut addr = glue(self.h, self.l);
+                    addr += 1;
+                    self.h = (addr >> 8) as u8;
+                    self.l = addr as u8;
+                    addr - 1
+                }
+                DoubleReg::HLM => {
+                    let mut addr = glue(self.h, self.l);
+                    addr -= 1;
+                    self.h = (addr >> 8) as u8;
+                    self.l = addr as u8;
+                    addr + 1
+                }
+                DoubleReg::SP => self.sp,
+                DoubleReg::PC => self.pc,
+            }
+        }
+        pub fn set_r8(&mut self, reg: SingleReg, val: u8) {
+            match reg {
+                SingleReg::A => self.a = val,
+                SingleReg::B => self.b = val,
+                SingleReg::C => self.c = val,
+                SingleReg::D => self.d = val,
+                SingleReg::E => self.e = val,
+                SingleReg::Memptr => {
+                    let addr = self.get_r16(DoubleReg::HL);
+                    self.memory.set_memory_8(addr, val)
+                }
+                SingleReg::F => panic!("We cannot set the flag register"),
+                SingleReg::H => self.h = val,
+                SingleReg::L => self.l = val,
+            }
+        }
+        pub fn set_r16(&mut self, reg: DoubleReg, val: u16) {
+            match reg {
+                DoubleReg::AF|DoubleReg::HLP | DoubleReg::HLM=> panic!("We can't set F from Double Set"),
+                DoubleReg::BC => {
+                    self.b = (val >> 8) as u8;
+                    self.c = val as u8;
+                }
+                DoubleReg::DE => {
+                    self.d = (val >> 8) as u8;
+                    self.e = val as u8;
+                }
+                DoubleReg::HL => {
+                    self.h = (val >> 8) as u8;
+                    self.l = val as u8;
+                }
+                DoubleReg::SP => self.sp = val,
+                DoubleReg::PC => self.pc = val,
+            }
+        }
+        pub fn set_flag(&mut self, flag: Flag) {
+            self.f |= match flag {
+                Flag::Zero => 128,
+                Flag::Neg => 64,
+                Flag::HalfCarry => 32,
+                Flag::Carry => 16,
+            };
+        }
+        pub fn set_flags(&mut self, zero: bool, neg: bool, hc: bool, carry: bool) {
+            self.f =
+                ((((((zero as u8) << 1) + ((neg as u8) << 1)) + hc as u8) << 1) + carry as u8) << 4
+        }
+        pub fn unset_flag(&mut self, flag: Flag) {
+            self.f &= match flag {
+                Flag::Zero => 0x7F,
+                Flag::Neg => 0xBF,
+                Flag::HalfCarry => 0xDF,
+                Flag::Carry => 0xEF,
+            };
+        }
+        pub fn change_r16(&mut self, reg: DoubleReg, fun: &dyn Fn(u16) -> u16) {
+            let result = fun(self.get_r16(reg));
+            self.set_r16(reg, result);
+        }
+        pub fn get_bit(&mut self, reg: SingleReg, idx: u8) -> bool {
+            return (self.get_r8(reg) & (1 << idx)) == (1 << idx);
+        }
+        pub fn reset_flags(&mut self) {
+            self.set_flags(false, false, false, false);
+        }
+    }
+    impl Debug for CpuState {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Reg")
+                .field("A", &format!("{:X?}", &self.a))
+                .field("B", &format!("{:X?}", &self.b))
+                .field("C", &format!("{:X?}", &self.c))
+                .field("D", &format!("{:X?}", &self.d))
+                .field("E", &format!("{:X?}", &self.e))
+                .field(
+                    "F",
+                    &format!(
+                        "[Z:{},N:{},HC:{},C:{}]",
+                        ((&self.f >> 7) == 1) as u8,
+                        (((&self.f & 0x40) >> 6) == 1) as u8,
+                        (((&self.f & 0x20) >> 5) == 1) as u8,
+                        (((&self.f & 0x10) >> 4) == 1) as u8
+                    ),
+                )
+                .field("H", &format!("{:X?}", &self.h))
+                .field("L", &format!("{:X?}", &self.l))
+                .field("SP", &format!("{:X?}", &self.sp))
+                .field("pc", &format!("{:X?}", &self.pc))
+                .finish()
+        }
+    }
+    #[derive(Copy, Clone, Debug)]
+    pub enum SingleReg {
+        A,
+        B,
+        C,
+        D,
+        E,
+        F,
+        H,
+        L,
+        Memptr,
+    }
+    #[derive(Copy, Clone, Debug)]
+    pub enum DoubleReg {
+        AF,
+        BC,
+        DE,
+        HL,
+        HLP,
+        HLM,
+        SP,
+        PC,
+    }
+    pub enum Flag {
+        Zero,
+        Neg, //Often marked as N.
+        HalfCarry,
+        Carry,
     }
 }

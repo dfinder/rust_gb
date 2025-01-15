@@ -6,7 +6,6 @@ pub mod video_controller;
 pub mod vram;
 pub mod screen {
 
-    use std::{thread::{self, Thread}, time::Duration};
 
     use log::info;
     use sdl2::{pixels::Color, rect::Point, render::Canvas, video::Window};
@@ -118,7 +117,6 @@ pub mod screen {
                 .get_tile()
                 .map(|x| x.map(|y| background_palette(y)))
             };
-
             let bg_tile_map = match self.vc.lcdc >> 3 % 2 == 0 {
                 true => &self.vram.tmap2.tiles,
                 false => &self.vram.tmap1.tiles,
@@ -140,7 +138,7 @@ pub mod screen {
                 for x in (self.vc.scx as u16)..(self.vc.scx as u16 + 160) {
                     self.canvas.set_draw_color(background[ (y%256) as usize][(x%256) as usize]);
                     self.canvas
-                        .draw_point(Point::new(((x-self.vc.scx as u16)%256) as i32, ((y-self.vc.scy as u16)%256) as i32))
+                        .draw_point(Point::new((((x-self.vc.scx as u16).wrapping_sub(7)as u16)%256) as i32, ((y-self.vc.scy as u16)%256) as i32))
                         .expect("Pixel failed to write");
                 }
             }

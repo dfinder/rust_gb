@@ -73,9 +73,6 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
-            if val != 0 {
-                info!("WE WRITE TO THE TILE MAP: {:X?}@{:X?}", val, addr);
-            }
             self.tiles[(addr >> 5) as usize][(addr % 32) as usize] = val
         }
     }
@@ -96,9 +93,6 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
-            if val != 0 {
-                info!("WE WRITE TO BLOCK: {:X?}@{:X?}", val, addr);
-            }
             self.objects[(addr >> 4) as usize].memory_write(addr % 16, val)
         }
     }
@@ -115,9 +109,6 @@ pub mod vram {
         }
 
         fn memory_write(&mut self, addr: u16, val: u8) {
-            if val != 0 {
-                info!("WE WRITE TO THIS BLOCK {:X?}@{:X?}", val, addr);
-            }
             self.data[addr as usize] = val
         }
     }

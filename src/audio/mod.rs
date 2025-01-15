@@ -13,8 +13,6 @@ pub mod audio_controller {
 
     use crate::memory::memory_wrapper::AsMemory;
 
-
-
     pub struct AudioController {
         pub audio_channel1: SquareSweep,  //FF10
         pub audio_channel2: SquareWave,   //FF16
