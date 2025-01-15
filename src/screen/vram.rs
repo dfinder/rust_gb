@@ -122,20 +122,20 @@ pub mod vram {
             ret = (ret ^ (ret << 2)) & 0x3333; //0011001100110011
             (ret ^ (ret << 1)) & 0x5555 //0101010101010101
         }
-        fn interleave(&self, a: u8, b: u8) -> u16 {
+        fn interleave(a: u8, b: u8) -> u16 {
             (Self::interleave_with_zeros(b) << 1) | Self::interleave_with_zeros(a)
         }
         pub fn get_tile(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
-                ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
+                ret[i] = Vobj::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
             }
             return ret.map(|x| Self::color_palette(x));
         }
         pub fn get_tile_backwards(&self) -> Tile {
             let mut ret: [u16; 8] = [0; 8];
             for i in 0..7 {
-                ret[i] = Self::interleave(self, self.data[2 * i], self.data[(2 * i) + 1]);
+                ret[i] = Vobj::interleave(self.data[2 * i], self.data[(2 * i) + 1]);
             }
             let mut ret_tile = ret.map(|x| Self::color_palette_reverse(x));
             ret_tile.reverse();
