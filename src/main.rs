@@ -5,17 +5,20 @@ pub mod cartridge;
 pub mod cpu;
 pub mod memory;
 pub mod screen;
-use std::{cell::RefCell, cmp::max, fs::File, rc::Rc, thread, time::Duration};
+use std::{cell::RefCell, cmp::max, fs::File, rc::Rc};
 
 use audio::audio_controller::AudioController;
 use cpu::cpu::CpuStruct;
 use joypad::joypad::Joypad;
 use sdl2::{self, event::Event, keyboard::{Keycode, Scancode}, pixels::Color, EventPump};
-use colog;
+
+use log::LevelFilter;
+//use colog;
 fn main() {
 
     //let mut clog = colog::default_builder();
-    colog::init();
+    //colog::init();
+    let _ = simple_logging::log_to_file("./exec_dump.txt", LevelFilter::Debug);
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();

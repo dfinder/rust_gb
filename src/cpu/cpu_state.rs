@@ -3,13 +3,13 @@ pub mod cpu_state {
         audio::audio_controller::AudioController, joypad::joypad::Joypad,
         memory::memory_wrapper::MemWrap,
     };
-    use log::info;
+    
     use sdl2::{render::Canvas, video::Window};
     use std::fmt::Debug;
     use std::{cell::RefCell, fs::File, rc::Rc};
 
     pub struct CpuState {
-        memory: MemWrap,
+        pub memory: MemWrap,
         a: u8,
         b: u8,
         c: u8,
@@ -104,7 +104,10 @@ pub mod cpu_state {
         }
         pub fn get_r16_mem_8(&mut self, reg: DoubleReg) -> u8 {
             let addr = self.get_r16(reg);
-            self.memory.grab_memory_8(addr)
+            //info!("{:X?}",addr);
+            let ret = self.memory.grab_memory_8(addr);
+            //info!("{:X?}",ret );
+            ret 
         }
         pub fn get_r16_mem_16(&mut self, reg: DoubleReg) -> u16 {
             let addr = self.get_r16(reg);
@@ -114,12 +117,12 @@ pub mod cpu_state {
             
             let value = self.get_r16_mem_16(DoubleReg::SP);
             self.sp=self.sp+2;
-            info!("POPPING {:?}",value);
+            //info!("POPPING {:?}",value);
             return value
         }
         pub fn push(&mut self,val: u16){
 
-            info!("PUSHING {:?}",val);
+            //info!("PUSHING {:?}",val);
             self.sp=self.sp-2;
             self.set_r16_mem_16(DoubleReg::SP, val);
         }
@@ -267,8 +270,9 @@ pub mod cpu_state {
             };
         }
         pub fn set_flags(&mut self, zero: bool, neg: bool, hc: bool, carry: bool) {
-            self.f =
-                ((((((zero as u8) << 1) + ((neg as u8) << 1)) + hc as u8) << 1) + carry as u8) << 4
+            
+            self.f = (128 * zero as u8) + (64*neg as u8) + (32 * hc as u8) + 16*(carry as u8);
+            //println!("{:X?}",self.f);
         }
         pub fn unset_flag(&mut self, flag: Flag) {
             self.f &= match flag {
@@ -291,13 +295,14 @@ pub mod cpu_state {
     }
     impl Debug for CpuState {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("Reg")
-                .field("A", &format!("{:X?}", &self.a))
-                .field("B", &format!("{:X?}", &self.b))
-                .field("C", &format!("{:X?}", &self.c))
-                .field("D", &format!("{:X?}", &self.d))
-                .field("E", &format!("{:X?}", &self.e))
-                .field(
+            f.debug_struct("")
+                .field("A", &format!("{:0>2X?}", &self.a))
+                .field("F", &format!("{:0>2X?}", &self.f))
+                .field("B", &format!("{:0>2X?}", &self.b))
+                .field("C", &format!("{:0>2X?}", &self.c))
+                .field("D", &format!("{:0>2X?}", &self.d))
+                .field("E", &format!("{:0>2X?}", &self.e))
+/*                 .field(
                     "F",
                     &format!(
                         "[Z:{},N:{},HC:{},C:{}]",
@@ -306,11 +311,11 @@ pub mod cpu_state {
                         (((&self.f & 0x20) >> 5) == 1) as u8,
                         (((&self.f & 0x10) >> 4) == 1) as u8
                     ),
-                )
-                .field("H", &format!("{:X?}", &self.h))
-                .field("L", &format!("{:X?}", &self.l))
-                .field("SP", &format!("{:X?}", &self.sp))
-                .field("pc", &format!("{:X?}", &self.pc))
+                ) */
+                .field("H", &format!("{:0>2X?}", &self.h))
+                .field("L", &format!("{:0>2X?}", &self.l))
+                .field("SP", &format!("{:0>4X?}", &self.sp))
+                .field("PC", &format!("{:0>4X?}", &self.pc))
                 .finish()
         }
     }

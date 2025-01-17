@@ -8,7 +8,6 @@
 
 pub mod audio_controller {
 
-    use log::info;
     use sdl2::audio::{AudioQueue, AudioSpecDesired};
 
     use crate::memory::memory_wrapper::AsMemory;
@@ -65,7 +64,7 @@ pub mod audio_controller {
     }
     
     impl AsMemory for AudioController {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0x0000..=0x0005 => self.audio_channel1.memory_map(addr),
                 0x0006..=0x0009 => self.audio_channel2.memory_map(addr - 0x006),
@@ -80,7 +79,7 @@ pub mod audio_controller {
             }
         }
     
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             if self.audio_master_control &0x80 ==0 {
                 match addr{
 
@@ -144,27 +143,31 @@ pub mod audio_controller {
                 self.envelope=0;
                 self.frequency=0;
                 self.control=0;
-            }
-            let left_pan = panning >> 4 % 2 == 1;
-            let right_pan = panning % 2 == 1;
-            let left_volume = volume >>4 %8+1;
-            let right_volume = volume % 8+1;
-            let pace = self.sweep>>4 % 8;
-            let direction = self.sweep>4 % 2;
-            let individual_step = self.sweep % 8 ;
-            let wave_duty = self.sound_length >> 6 % 4;
-            let initial_timer = self.sound_length % 1>> 5;
-            let initial_volume = self.envelope >> 4;
-            let env_dir = self.envelope >> 3 %2;
-            let sweep_pace = self.envelope %8;
-            let period:u16 = (self.control % 8)as u16 + self.frequency as u16;
+            } 
+            let _left_pan = panning >> 4 % 2 == 1;
+            let _right_pan = panning % 2 == 1;
+            let _left_volume = volume >>4 %8+1;
+            let _right_volume = volume % 8+1;
+            let _pace = self.sweep>>4 % 8;
+            let _direction = self.sweep>4 % 2;
+            let _individual_step = self.sweep % 8 ;
+            let _wave_duty = self.sound_length >> 6 % 4;
+            let _initial_timer = self.sound_length % 1>> 5;
+            let _initial_volume = self.envelope >> 4;
+            let _env_dir = self.envelope >> 3 %2;
+            let _sweep_pace = self.envelope %8;
+            let _period:u16 = (self.control % 8)as u16 + self.frequency as u16; 
             let length_enable = self.control>>6 %2 == 1;
             let trigger = self.control >> 7 == 1;
+            if self.period>0{//remove later
+
+            }
             if trigger{
 
             }
             if length_enable{
 
+                self.queue.queue_audio(&[0]).expect("test");
             }
 
 
@@ -172,7 +175,7 @@ pub mod audio_controller {
         //I run every 1/64 of a seocnd?
     }
     impl AsMemory for SquareSweep {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0x0000 => self.sweep,
                 0x0001 => self.sound_length&0xC0, //Bits 5-0 are write only
@@ -183,7 +186,7 @@ pub mod audio_controller {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0x0000 => self.temp_sweep = val,
                 0x0001 => self.sound_length = val,
@@ -220,7 +223,7 @@ pub mod audio_controller {
         }
     }
     impl AsMemory for SquareWave {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0x0000 => self.sound_length,
                 0x0001 => self.envelope,
@@ -230,7 +233,7 @@ pub mod audio_controller {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0x0000 => self.sound_length = val,
                 0x0001 => self.envelope = val,
@@ -270,7 +273,7 @@ pub mod audio_controller {
         }
     }
     impl AsMemory for Wave {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0x0000 => self.enable,
                 0x0001 => self.sound_length,
@@ -281,7 +284,7 @@ pub mod audio_controller {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0x0000 => self.enable = val,
                 0x0001 => self.sound_length = val,
@@ -316,7 +319,7 @@ pub mod audio_controller {
         }
     }
     impl AsMemory for Noise {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0x0000 => self.sound_length,
                 0x0001 => self.volume,
@@ -326,7 +329,7 @@ pub mod audio_controller {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0x0000 => self.sound_length = val,
                 0x0001 => self.volume = val,

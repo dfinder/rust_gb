@@ -1,3 +1,0 @@
-DMG Notes:
-00: 0x31: LD FFFE -> SP
-03: AF: XOR A,A 

@@ -19,7 +19,7 @@ pub mod joypad {
         Left,
         Right,
     }
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy,Debug)]
     struct KeyWrapper {
         v_key: GBKey,
         p_key: Scancode,

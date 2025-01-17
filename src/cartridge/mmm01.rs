@@ -11,17 +11,17 @@ pub mod mmm01 { //multicart
         {
            todo!();
         }
-        fn rom_read(&mut self, addr: u16) -> u8 {
+        fn rom_read(&mut self, addr: usize) -> u8 {
             return self.rom[addr as usize];
         }
 
-        fn rom_write(&mut self, _addr: u16, _val: u8) {
+        fn rom_write(&mut self, _addr: usize, _val: u8) {
             ()
         }
-        fn ram_read(&mut self, addr: u16) -> u8 {
+        fn ram_read(&mut self, addr: usize) -> u8 {
             return self.ram[addr as usize];
         }
-        fn ram_write(&mut self, addr: u16, val: u8) {
+        fn ram_write(&mut self, addr: usize, val: u8) {
             self.ram[addr as usize] = val;
         }
     }

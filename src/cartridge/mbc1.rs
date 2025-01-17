@@ -1,5 +1,4 @@
 pub mod mbc1 {
-    use log::info;
 
     use crate::cartridge::mbc::mbc::{ram_size, rom_size, Bank, Mbc};
     use std::cmp::max;
@@ -17,7 +16,7 @@ pub mod mbc1 {
             Self: Sized,
         {   
             let mut rom: Vec<Bank> = vec![[0; 16384]; rom_size(cart[0x0148])];
-            for (idx,chunk) in cart.rchunks(16384).enumerate(){
+            for (idx,chunk) in cart.chunks(16384).enumerate(){
                 
                 rom[idx] = chunk.try_into().expect("Rom chunking panicked");
             }
@@ -32,16 +31,17 @@ pub mod mbc1 {
                 bank_mode: false,
             };
         }
-        fn rom_read(&mut self, addr: u16) -> u8 {
-            info!("addr{:X?}",addr);
-            match addr {
+        fn rom_read(&mut self, addr: usize) -> u8 {
+            
+            let ret = match addr {
                 0..=0x3FFF => self.rom[0][addr as usize],
                 0x4000..=0x7fff => self.rom[self.rom_bank_num][(addr-0x4000) as usize],
                 _ => unreachable!(),
-            }
+            };
+            return ret 
         }
 
-        fn rom_write(&mut self, addr: u16, val: u8) {
+        fn rom_write(&mut self, addr: usize, val: u8) {
             //info!("{:?}",self.ram.len());
             match addr {
                 0..=0x1fff => self.ram_enable = val == 0xA,
@@ -54,7 +54,7 @@ pub mod mbc1 {
                 _ => unreachable!(),
             }
         }
-        fn ram_read(&mut self, addr: u16) -> u8 {
+        fn ram_read(&mut self, addr: usize) -> u8 {
             //So this is the space A000->BFFF. We only go away from this if we turn on the bank mode.
             if !self.ram_enable {
                 return 0xFF;
@@ -62,7 +62,7 @@ pub mod mbc1 {
                 return self.ram[self.ram_bank_num * (self.bank_mode as usize)][addr as usize];
             }
         }
-        fn ram_write(&mut self, addr: u16, val: u8) {
+        fn ram_write(&mut self, addr: usize, val: u8) {
             if self.ram_enable {
                 let ram_idx = self.ram_bank_num * (self.bank_mode as usize) % self.ram.len();
                 self.ram[ram_idx][addr as usize] = val

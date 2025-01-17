@@ -25,7 +25,7 @@ pub mod mbc2 {
                 bank_mode: false,
             };
         }
-        fn rom_read(&mut self, addr: u16) -> u8 {
+        fn rom_read(&mut self, addr: usize) -> u8 {
             match addr {
                 0..=0x3FFF => self.rom[0][addr as usize],
                 0x4000..=0x7fff => self.rom[max(1, self.rom_bank_num % 16)][addr as usize],
@@ -33,7 +33,7 @@ pub mod mbc2 {
             }
         }
 
-        fn rom_write(&mut self, addr: u16, val: u8) {
+        fn rom_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0..=0x1fff => {
                     if (addr & 0x10) == 0x10 {
@@ -51,7 +51,7 @@ pub mod mbc2 {
                 _ => unreachable!(),
             }
         }
-        fn ram_read(&mut self, addr: u16) -> u8 {
+        fn ram_read(&mut self, addr: usize) -> u8 {
             //So this is the space A000->BFFF. We only go away from this if we turn on the bank mode.
             if !self.ram_enable {
                 return 0x0F;
@@ -59,7 +59,7 @@ pub mod mbc2 {
                 return self.ram[(addr % 512) as usize] & 0x0F;
             }
         }
-        fn ram_write(&mut self, addr: u16, val: u8) {
+        fn ram_write(&mut self, addr: usize, val: u8) {
             if self.ram_enable {
                 self.ram[(addr % 512) as usize] = val
             }

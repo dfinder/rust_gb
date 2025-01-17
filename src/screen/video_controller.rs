@@ -1,6 +1,5 @@
 pub mod video_controller {
     use crate::memory::memory_wrapper::AsMemory;
-    use log::info;
     use std::fmt::Debug;
     #[derive(Clone, Copy)]
 
@@ -38,7 +37,7 @@ pub mod video_controller {
     }
     impl AsMemory for VideoController {
         //Remember
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             match addr {
                 0 => self.lcdc, //LCD control register, controls which banks are used, whether windows/background is used, etc.
                 1 => self.stat, //Interrupts
@@ -56,7 +55,7 @@ pub mod video_controller {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             match addr {
                 0 => self.lcdc = val,
                 1 => self.stat = val & 0xFB, //Last two bits are unwritable

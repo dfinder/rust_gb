@@ -10,17 +10,14 @@ pub mod cpu {
     use super::function_table::function_table::{CPUFn, Dest16, Dest8, FunFind, Src16, Src8};
     use crate::audio::audio_controller::AudioController;
     use crate::joypad::joypad::Joypad;
-    use log::info;
+    use log:: info;
     use sdl2::render::Canvas;
     use sdl2::video::Window;
     use std::cell::RefCell;
     use std::fs::File;
     use std::ops::Sub;
-
     use std::rc::Rc;
-    use std::thread::{self, Thread};
-    use std::time::Duration;
-    use std::{mem, u8};
+    use std::u8;
 
     //const CLOCK_PERIOD: time::Duration = Duration::from_nanos(239);
 
@@ -71,7 +68,7 @@ pub mod cpu {
             } //Find a different way of doing this:
               //Break things apart according to our old pipeline model
         }
-        pub fn test_command(&mut self, command: Vec<u8>) {
+        pub fn test_command(&mut self, _command: Vec<u8>) {
             //let current_pc = self.cpu_state.get_pc();
             //self.instruction_register = self.cpu_state.get_byte(current_pc);
             info!("R:{:?}", self.cpu_state);
@@ -152,16 +149,14 @@ pub mod cpu {
                 if !self.stopped {
                     let current_pc = self.cpu_state.get_pc();
                     self.instruction_register = self.cpu_state.get_byte(current_pc);
-                    info!("R:{:?}", self.cpu_state);
-                    //info!("IR:{:X?}", self.instruction_register);
-                    if (0x0095..0x00A7).contains(&current_pc) {
-                         //thread::sleep(Duration::from_secs(1));
-                    }
+                   
                     if self.instruction_register != 0xF3 {
                         //0xf3= disable interrutpts
                         self.handle_interrupts();
                     }
                     if !self.cb_flag {
+                        //info!("{:?}", self.cpu_state);
+                        //info!("IR:{:X?}", self.cpu);
                         for fun_entry in self.function_lookup {
                             if (self.instruction_register & fun_entry.mask) == fun_entry.value {
                                 match fun_entry.fun {
@@ -315,7 +310,7 @@ pub mod cpu {
         }
         // Rotations
         pub fn rl(&mut self, op: u8) -> u8 {
-            info!("CPU Operation is Rotate Left through Carry");
+            //info!("CPU Operation is Rotate Left through Carry");
             let carry: bool = self.cpu_state.get_flag(Flag::Carry);
             let ret = (op << 1) + (carry as u8);
             self.cpu_state
@@ -585,6 +580,7 @@ pub mod cpu {
         }
         pub fn xor(&mut self, acc: u8, op: u8) -> u8 {
             //info!("CPU OP: Xor");;
+            //println!("{:?}",acc^op);
             self.cpu_state
                 .set_flags((acc ^ op) == 0, false, false, false);
             acc ^ op

@@ -1,8 +1,7 @@
 pub mod oam {
 
-    use std::{thread, time::Duration};
 
-    use log::info;
+    
 
     use crate::memory::memory_wrapper::AsMemory;
     pub struct OamStruct {
@@ -29,7 +28,7 @@ pub mod oam {
         pub attributes: u8,
     }
     impl AsMemory for Oam {
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             //info!("{:?}", &self);
             //thread::sleep(Duration::from_secs(1));
             match addr {
@@ -41,7 +40,7 @@ pub mod oam {
             }
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
+        fn memory_write(&mut self, addr: usize, val: u8) {
             //info!("{:?}", &self);
             //thread::sleep(Duration::from_secs(1));
             match addr {
@@ -55,12 +54,12 @@ pub mod oam {
     }
     impl AsMemory for OamStruct {
         //Somehow we need to check if we're in VBlank or HBlank from FF41
-        fn memory_map(&mut self, addr: u16) -> u8 {
+        fn memory_map(&mut self, addr: usize) -> u8 {
             self.oam_list[(addr >> 2) as usize].memory_map(addr & 0x0003)
         }
 
-        fn memory_write(&mut self, addr: u16, val: u8) {
-            info!("HEY WE MAKE IT TO WRITING THE OAM STRUCT");
+        fn memory_write(&mut self, addr: usize, val: u8) {
+            //info!("HEY WE MAKE IT TO WRITING THE OAM STRUCT");
 
             //(Duration::from_secs(10));
             self.oam_list[(addr >> 2) as usize].memory_write(addr & 0x0003, val)

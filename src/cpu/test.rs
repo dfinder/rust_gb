@@ -3,7 +3,7 @@ mod tests {
     use std::{cell::RefCell, fs::File, rc::Rc};
 
     use sdl2::{
-        keyboard::{Keycode, Scancode},
+        keyboard::Scancode,
         pixels::Color,
         EventPump,
     };
@@ -17,7 +17,7 @@ mod tests {
         let mut testing_gb = test_setup("./Mario.gb");
         testing_gb.test_init();
     }
-    fn test_setup(path: &str) -> CpuStruct {
+    fn test_setup(_path: &str) -> CpuStruct {
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
         let audio_subsystem = sdl_context.audio().unwrap();

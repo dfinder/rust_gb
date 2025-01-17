@@ -23,7 +23,7 @@ pub mod mbc5 {
                 ram_enable: false,
             };
         }
-        fn rom_read(&mut self, addr: u16) -> u8 {
+        fn rom_read(&mut self, addr: usize) -> u8 {
             match addr {
                 0..=0x3FFF => self.rom[0][addr as usize],
                 0x4000..=0x7fff => self.rom[self.rom_bank_num % 16][addr as usize],
@@ -31,7 +31,7 @@ pub mod mbc5 {
             }
         }
 
-        fn rom_write(&mut self, addr: u16, val: u8) {
+        fn rom_write(&mut self, addr: usize, val: u8) {
             //Note there's something about rumble here.
             match addr {
                 0..=0x1fff => self.ram_enable = val == 0x0A,
@@ -43,7 +43,7 @@ pub mod mbc5 {
                 _ => unreachable!(),
             }
         }
-        fn ram_read(&mut self, addr: u16) -> u8 {
+        fn ram_read(&mut self, addr: usize) -> u8 {
             //So this is the space A000->BFFF. We only go away from this if we turn on the bank mode.
             if !self.ram_enable {
                 return 0x0F;
@@ -51,7 +51,7 @@ pub mod mbc5 {
                 return self.ram[self.ram_bank_num][addr as usize];
             }
         }
-        fn ram_write(&mut self, addr: u16, val: u8) {
+        fn ram_write(&mut self, addr: usize, val: u8) {
             if self.ram_enable {
                 self.ram[self.ram_bank_num][addr as usize] = val
             }

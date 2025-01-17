@@ -4,10 +4,10 @@ pub mod mbc {
         fn new(cart: Vec<u8>) -> Self
         where
             Self: Sized;
-        fn rom_read(&mut self, addr: u16) -> u8;
-        fn rom_write(&mut self, addr: u16, val: u8);
-        fn ram_read(&mut self, addr: u16) -> u8;
-        fn ram_write(&mut self, addr: u16, val: u8);
+        fn rom_read(&mut self, addr: usize) -> u8;
+        fn rom_write(&mut self, addr: usize, val: u8);
+        fn ram_read(&mut self, addr: usize) -> u8;
+        fn ram_write(&mut self, addr: usize, val: u8);
     }
     pub fn rom_size(val: u8) -> usize {
         match val {

@@ -7,7 +7,7 @@ pub mod vram;
 pub mod screen {
 
 
-    use log::info;
+    use log::{debug, info};
     use sdl2::{pixels::Color, rect::Point, render::Canvas, video::Window};
 
     use crate::{
@@ -18,6 +18,8 @@ pub mod screen {
             vram::vram::Vram,
         },
     };
+
+    use super::vram::vram::Block;
 
     type VirtualBoundedScreen = [[GBColor; 160]; 144];
     pub struct Screen {
@@ -102,7 +104,7 @@ pub mod screen {
                 ColorID::Two => (self.vc.bgp & 0x30) >> 4,
                 ColorID::Three => self.vc.bgp >> 6,
                 ColorID::Unset => unreachable!(),
-            } {
+            }{
                 0 => Color::RGB(0xFF, 0xFF, 0xFF),
                 1 => Color::RGB(0xb8, 0xb8, 0xb8),
                 2 => Color::RGB(0x68, 0x68, 0x68),
@@ -110,38 +112,40 @@ pub mod screen {
                 _ => unreachable!(),
             };
             let tile_data_lookup = |x: u8| {
-                match x {
+                Block::get_tile(match x {
                     0..128 => tile_data_area.0.objects[x as usize],
                     128..=255 => tile_data_area.1.objects[(x - 128) as usize],
-                }
-                .get_tile()
+                })
                 .map(|x| x.map(|y| background_palette(y)))
             };
+
             let bg_tile_map = match self.vc.lcdc >> 3 % 2 == 0 {
                 true => &self.vram.tmap2.tiles,
-                false => &self.vram.tmap1.tiles,
+                false=> &self.vram.tmap1.tiles,
             };
-            for tile_y in 0..32 {
-                for tile_x in 0..32 {
-                    let tile = tile_data_lookup(bg_tile_map[tile_y][tile_x]);
-                    for pixel_x in 0..8 {
-                        for pixel_y in 0..8 {
-                            background[(8 * tile_y) + pixel_y][(8 * tile_x) + pixel_x] =
-                                tile[pixel_y][pixel_x];
-                        }
+            for tile_idx in 0..(32*32) {
+            //let tile_idx = 0; 
+                //dbg!("DRAW TILE {:X?}, Y={:X?}, X={:X?}",tile_idx, tile_idx %32, tile_idx >>5);
+                let tile = tile_data_lookup(bg_tile_map[tile_idx]);
+                for pixel_x in 0..8 {
+                    for pixel_y in 0..8 {
+                        background[(tile_idx >>5)*8+pixel_y][(tile_idx%32)*8+pixel_x] =
+                            tile[pixel_y][pixel_x];
                     }
                 }
             }
+            //}
+            
             //info!("{:X?}",self.vc.scy);
             //thread::sleep(Duration::from_secs(5));
-            for y in (self.vc.scy as u16)..(self.vc.scy as u16 + 144){
-                for x in (self.vc.scx as u16)..(self.vc.scx as u16 + 160) {
-                    self.canvas.set_draw_color(background[ (y%256) as usize][(x%256) as usize]);
+            for y in (self.vc.scy as u16)..=(self.vc.scy as u16 + 144){
+                for x in (self.vc.scx as u16)..=(self.vc.scx as u16 + 160) {
+                    self.canvas.set_draw_color(background[ (y%256) as usize][(x%256) as usize]); 
                     self.canvas
                         .draw_point(Point::new((((x-self.vc.scx as u16).wrapping_sub(7)as u16)%256) as i32, ((y-self.vc.scy as u16)%256) as i32))
                         .expect("Pixel failed to write");
                 }
-            }
+            } 
             self.canvas.present();
             self.virtual_unrendered_screen = [[GBColor::Transparent; 160]; 144];
         }
@@ -217,11 +221,10 @@ pub mod screen {
                     false => (&self.vram.block2, &self.vram.block1),
                 };
                 let tile_data_lookup = |x: u8| {
-                    match x {
+                    Block::get_tile(match x {
                         0..128 => tile_data_area.0.objects[x as usize],
                         128..=255 => tile_data_area.1.objects[(x - 128) as usize],
-                    }
-                    .get_tile()
+                    })
                 };
                 if self.vc.lcdc >> 5 % 2 != 0 && self.vc.wy < self.vc.ly {
                     //Window
@@ -229,24 +232,24 @@ pub mod screen {
                         true => &self.vram.tmap2,
                         false => &self.vram.tmap1,
                     };
-                    for tile_x in 0..32 {
+                    /* for tile_x in 0..32 {
                         let tile_y = self.vc.ly >> 3;
                         let in_tile_row = self.vc.ly % 8;
                         for in_tile_x in 0..8 {
                             window[8 * tile_x + in_tile_x] = background_palette(
-                                tile_data_lookup(window_tile_map.tiles[tile_y as usize][tile_x])
+                                tile_data_lookup(window_tile_map.tiles[tile_y ][tile_x])
                                     [in_tile_row as usize][in_tile_x],
                             );
                         }
-                    }
+                    } */
                 }
                 let bg_tile_map = match self.vc.lcdc >> 3 % 2 == 0 {
                     true => &self.vram.tmap2.tiles,
                     false => &self.vram.tmap1.tiles,
                 };
                 //info!("{:X?}", self.vc.scy);
-                //info!("{:X?}", self.vc.ly);
-                for tile_x in 0..32 {
+                //info!("{:X?}", self.vc.ly);/
+                /*for tile_x in 0..32 {
                     let view_port_y = self.vc.scy + self.vc.ly; //So we're on line 65, and teh
                     let tile_y = view_port_y >> 3;
                     let in_tile_row = view_port_y % 8;
@@ -255,11 +258,11 @@ pub mod screen {
                         //    tile_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x]));
                         //    thread::sleep(Duration::from_secs(5));
                         background[8 * tile_x + in_tile_x] = background_palette(
-                            tile_data_lookup(bg_tile_map[tile_y as usize][tile_x])
+                            tile_data_lookup(bg_tile_map[tile_y][tile_x])
                                 [in_tile_row as usize][in_tile_x],
                         );
                     }
-                }
+                } */
 
                 for i in 0..160 {
                     pixel_line[i] = background[(i + self.vc.scx as usize) % 256]
@@ -309,11 +312,11 @@ pub mod screen {
                     let mut tile_1;
                     let mut tile_2;
                     if x_flip {
-                        tile_1 = vobj_1.get_tile_backwards();
-                        tile_2 = vobj_2.get_tile_backwards();
+                        tile_1 = Block::get_tile_backwards(vobj_1);
+                        tile_2 = Block::get_tile_backwards(vobj_2);
                     } else {
-                        tile_1 = vobj_1.get_tile();
-                        tile_2 = vobj_2.get_tile();
+                        tile_1 = Block::get_tile(vobj_1);
+                        tile_2 = Block::get_tile(vobj_2);
                     }
                     if y_flip {
                         if obj_size {
@@ -404,7 +407,7 @@ pub mod screen {
                     //mode 0->1
                     self.vc.stat += 1;
                     self.dirty_vblank();
-                    interrupt.1 = Some(Interrupt::VBlank); //Remember, VBlank is a separate thing
+                    interrupt.1 = Some(Interrupt::VBlank); 
                 }
 
                 if self.vc.ly > 153 {
@@ -425,26 +428,26 @@ pub mod screen {
             self.vc.stat % 4
         }
         //These functions have to be different because we have to implement PPU mode memory locking
-        pub fn read_vram(&mut self, addr: u16) -> u8 {
+        pub fn read_vram(&mut self, addr: usize) -> u8 {
             if self.mode() != 3 {
                 return self.vram.memory_map(addr);
             }
             0xFF
         }
-        pub fn write_vram(&mut self, addr: u16, val: u8) {
+        pub fn write_vram(&mut self, addr: usize, val: u8) {
             if self.mode() != 3 {
                 self.vram.memory_write(addr, val);
             } else {
                 info!("Our issue is here!");
             }
         }
-        pub fn read_oam(&mut self, addr: u16) -> u8 {
+        pub fn read_oam(&mut self, addr: usize) -> u8 {
             if (0..=1).contains(&self.mode()) {
                 return self.oam.memory_map(addr);
             }
             0xFF
         }
-        pub fn write_oam(&mut self, addr: u16, val: u8) {
+        pub fn write_oam(&mut self, addr: usize, val: u8) {
             if (0..=1).contains(&self.mode()) {
                 self.vram.memory_write(addr, val);
             }
