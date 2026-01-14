@@ -5,30 +5,50 @@ pub mod cartridge;
 pub mod cpu;
 pub mod memory;
 pub mod screen;
-use std::{cell::RefCell, cmp::max, fs::File, rc::Rc};
+use std::{cell::RefCell, cmp::max, fs::{File, OpenOptions}, rc::Rc, thread, time::Duration};
 
 use audio::audio_controller::AudioController;
 use cpu::cpu::CpuStruct;
+use env_logger::Builder;
 use joypad::joypad::Joypad;
 use sdl2::{self, event::Event, keyboard::{Keycode, Scancode}, pixels::Color, EventPump};
 
 use log::LevelFilter;
 //use colog;
-fn main() {
-
+fn main(){
+     
     //let mut clog = colog::default_builder();
-    //colog::init();
-    let _ = simple_logging::log_to_file("./exec_dump.txt", LevelFilter::Debug);
+    let log_file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)      // overwrite each run
+        // .append(true)     // use this instead if you want to append
+        .open("./exec_dump.txt").expect("Testing");
+
+    // Setup fern logger
+    fern::Dispatch::new()
+        // Set global log level
+        .level(LevelFilter::Trace)
+        // Format log messages: just the message, no timestamp, no level
+        .format(|out, message, _record| {
+            out.finish(format_args!("{}", message))
+        })
+        // Write to both stdout and file
+        .chain(std::io::stdout())   // optional
+        .chain(log_file)
+        // Apply as global logger
+        .apply().unwrap();
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
-    let window = video_subsystem.window("Gameboy",160,144).position_centered().build().unwrap();
+    let window = video_subsystem.window("Gameboy",256,256).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let gb_audio = AudioController::new(audio_subsystem);
 
     let event_pump = sdl_context.event_pump().unwrap();
     let wrapped_pump: Rc<RefCell<EventPump>> = Rc::new(RefCell::new(event_pump));
-    let cartridge = File::open("../Mario.gb").expect("msg");
+    let cartridge = File::open("./01-special.gb").expect("msg");
     let joypad: Joypad = Joypad::new([
         Scancode::M,
         Scancode::N,
@@ -48,7 +68,8 @@ fn main() {
         canvas,
         cartridge,
     );
-    let mut clockrate = 256;
+    my_cpu.test_init();
+    let mut clockrate = 1;
     'running: loop {
         for event in wrapped_pump.borrow_mut().poll_iter() {
             match event {
@@ -66,9 +87,8 @@ fn main() {
                 _ => {}
             }
         }
-        
-        my_cpu.interpret_command();
-        //thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
+        my_cpu.on_clock();
+        thread::sleep(Duration::new(0, 239*clockrate));//239*1024));
         //println!("{:?}", graphics_state);
         //let key_strokes:
     }

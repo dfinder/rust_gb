@@ -94,6 +94,7 @@ pub mod cartridge {
         }
 
         fn memory_write(&mut self, addr: usize, val: u8) {
+
             if addr > 0xA000 {
                 return match self {
                     Cartridge::Mbc0(mem) => mem.ram_write(addr - 0xA000, val),

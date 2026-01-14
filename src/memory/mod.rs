@@ -3,8 +3,9 @@ pub mod memory_wrapper {
     use std::{cell::RefCell, fs::File, io::Read, rc::Rc};
 
     use crate::{
-        audio::audio_controller::AudioController, cartridge::cartridge::Cartridge, cpu::interrupt::interrupt::Interrupt, joypad::joypad::Joypad, screen::screen::Screen
+        audio::audio_controller::AudioController, cartridge::cartridge::Cartridge, cpu::cpu::Interrupt, joypad::joypad::Joypad, screen::screen::Screen
     };
+    use log::info;
     use sdl2::{render::Canvas, video::Window};
 
     struct Timer {
@@ -85,12 +86,16 @@ pub mod memory_wrapper {
         fn memory_map(&mut self, addr: usize) -> u8;
         fn memory_write(&mut self, addr: usize, val: u8);
     }
+    pub trait AsDirtyMemory {
+        fn dirty_memory_map(&self, addr: usize) -> u8;
+    }
+    
     impl AsMemory for MemWrap {
         fn memory_map(&mut self, addr: usize) -> u8 {
             if self.dma.active {
                 match addr {
                     //We can only access high ram during DMA transfer
-                    0xFF80..=0xFFFE => self.high_ram[(addr - 0xFF80)],
+                    0xFF80..=0xFFFE => self.high_ram[addr - 0xFF80],
                     _ => 0xFF,
                 };
             }
@@ -213,6 +218,7 @@ pub mod memory_wrapper {
                 audio_controller: audio,
             }
         }
+
         pub fn grab_memory_8(&mut self, addr: u16) -> u8 {
             //info!("GET_MEMORY_8 ADDR{:#x}", addr);
             *self.wait.borrow_mut() += 2;
@@ -228,6 +234,10 @@ pub mod memory_wrapper {
             let low_byte = self.memory_map((addr).into());
            
             (high_byte as u16) * (1 << 8) + (low_byte as u16)
+        }
+        pub fn grab_memory_24(&mut self, addr:u16)->[u8;3]{
+            let addr = addr as usize;
+            [self.memory_map(addr),self.memory_map(addr+1),self.memory_map(addr+2)]
         }
         pub fn set_memory_8(&mut self, addr: u16, value: u8) {
             self.memory_write((addr).into(), value);

@@ -11,12 +11,10 @@ pub mod screen {
     use sdl2::{pixels::Color, rect::Point, render::Canvas, video::Window};
 
     use crate::{
-        cpu::interrupt::interrupt::Interrupt,
-        memory::memory_wrapper::AsMemory,
-        screen::{
+        cpu::cpu::Interrupt, memory::memory_wrapper::AsMemory, screen::{
             oam::oam::OamStruct, video_controller::video_controller::VideoController,
             vram::vram::Vram,
-        },
+        }
     };
 
     use super::vram::vram::Block;
@@ -89,7 +87,59 @@ pub mod screen {
             return self.virtual_rendered_screen;
         }
         //fn hblank(&mut self) {}
+        fn dirtiest_vblank(&mut self) {
+            let mut background: [[Color; 256]; 256] = [[Color::RED; 256]; 256];
+            let tile_data_area = match ((self.vc.lcdc >> 4) % 2) != 0 {
+                true => (&self.vram.block0, &self.vram.block1),
+                false => (&self.vram.block2, &self.vram.block1),
+            };
+            
+            let background_palette = |x| match match x {
+                ColorID::Zero => self.vc.bgp & 0x03,
+                ColorID::One => (self.vc.bgp & 0x0C) >> 2,
+                ColorID::Two => (self.vc.bgp & 0x30) >> 4,
+                ColorID::Three => self.vc.bgp >> 6,
+                ColorID::Unset => unreachable!(),
+            } {
+                0 => GBColor::White,
+                1 => GBColor::LightGrey,
+                2 => GBColor::DarkGrey,
+                3 => GBColor::Black,
+                _ => unreachable!(),
+            };
+            let tile_data_lookup = |x: u8| {
+                Block::get_tile(match x {
+                    0..128 => tile_data_area.0.objects[x as usize],
+                    128..=255 => tile_data_area.1.objects[(x - 128) as usize],
+                })
+                .map(|x| x.map(|y| background_palette(y)))
+            };
 
+            let bg_tile_map = match self.vc.lcdc >> 3 % 2 == 0 {
+                true => &self.vram.tmap2.tiles,
+                false=> &self.vram.tmap1.tiles,
+            };
+            for tile_idx in 0..(32) {
+            //let tile_idx = 0; 
+                let row = self.vc.scy>>5;
+                //dbg!("DRAW TILE {:X?}, Y={:X?}, X={:X?}",tile_idx, tile_idx %32, tile_idx >>5);
+                let tile = tile_data_lookup(bg_tile_map[(32*row as usize %256)+tile_idx as usize]);
+                for pixel_x in 0..8 {
+                    let pixel_y:usize = self.vc.ly as usize% 8;
+                   self.virtual_unrendered_screen[(tile_idx as usize >>5)*8+pixel_y ][(tile_idx%32)*8+pixel_x] =
+                        tile[pixel_y][pixel_x];
+                }
+            }
+            //}
+            
+            //info!("{:X?}",self.vc.scy);
+            //thread::sleep(Duration::from_secs(5));/* 
+           /*  for y in (self.vc.scy as u16)..=(self.vc.scy as u16 + 256){
+                for x in (self.vc.scx as u16)..=(self.vc.scx as u16 + 256) {
+                    self.virtual_unrendered_screen[self.vc.ly as usize] = background [self.vc.lyc as usize]
+                }
+            }   */
+        }
         fn dirty_vblank(&mut self) {
             self.canvas.clear();
             let mut background: [[Color; 256]; 256] = [[Color::WHITE; 256]; 256];
@@ -158,12 +208,12 @@ pub mod screen {
                 GBColor::Black => Color::RGB(0x00, 0x00, 0x00),
                 GBColor::Transparent => Color::RGB(0xff, 0x11, 0x11),
             };
-            for i in 0..144 {
-                for j in 0..160 {
+            for y in 0..144 {
+                for x in 0..160 {
                     self.canvas
-                        .set_draw_color(screen_color(self.virtual_unrendered_screen[i][j]));
+                        .set_draw_color(screen_color(self.virtual_unrendered_screen[y][x]));
                     self.canvas
-                        .draw_point(Point::new(j as i32, i as i32))
+                        .draw_point(Point::new(x as i32, y as i32))
                         .expect("Pixel failed to write");
                 }
             }
@@ -171,6 +221,7 @@ pub mod screen {
             self.virtual_unrendered_screen = [[GBColor::Transparent; 160]; 144];
             //Reset the internal screen
         }
+        
         pub fn oam_scan(&mut self) {
             //info!("WE SCAN OAM");
 
@@ -203,20 +254,21 @@ pub mod screen {
                 3 => GBColor::Black,
                 _ => unreachable!(),
             };
-            let background_palette = |x| match x {
+            let background_palette = |x|match x {
                 ColorID::Zero => color_mapping(bgp & 0x03),
                 ColorID::One => color_mapping((bgp & 0x0C) >> 2),
                 ColorID::Two => color_mapping((bgp & 0x30) >> 4),
                 ColorID::Three => color_mapping(bgp >> 6),
                 ColorID::Unset => unreachable!(),
             };
-            let mut pixel_line: [GBColor; 160] = [GBColor::Transparent; 160];
-            let mut background: [GBColor; 256] = [GBColor::Transparent; 256]; //A leaner system, I think
-            let mut window: [GBColor; 256] = [GBColor::Transparent; 256];
 
+            let mut pixel_line: [GBColor; 160] = [GBColor::Transparent; 160];
+            //let mut background: [GBColor; 256] = [GBColor::Transparent; 256]; //A leaner system, I think
+            //let mut window: [GBColor; 256] = [GBColor::Transparent; 256];
+            
             if self.vc.lcdc % 2 == 1 {
                 //Actually work with window/background
-                let tile_data_area = match self.vc.lcdc >> 4 % 2 != 0 {
+                let tile_data_area = match ((self.vc.lcdc >> 4) % 2) != 0 {
                     true => (&self.vram.block0, &self.vram.block1),
                     false => (&self.vram.block2, &self.vram.block1),
                 };
@@ -226,47 +278,60 @@ pub mod screen {
                         128..=255 => tile_data_area.1.objects[(x - 128) as usize],
                     })
                 };
-                if self.vc.lcdc >> 5 % 2 != 0 && self.vc.wy < self.vc.ly {
-                    //Window
-                    let window_tile_map = match self.vc.lcdc >> 5 % 2 == 0 {
-                        true => &self.vram.tmap2,
-                        false => &self.vram.tmap1,
-                    };
-                    /* for tile_x in 0..32 {
-                        let tile_y = self.vc.ly >> 3;
-                        let in_tile_row = self.vc.ly % 8;
-                        for in_tile_x in 0..8 {
-                            window[8 * tile_x + in_tile_x] = background_palette(
-                                tile_data_lookup(window_tile_map.tiles[tile_y ][tile_x])
-                                    [in_tile_row as usize][in_tile_x],
-                            );
-                        }
-                    } */
-                }
+              
+                
                 let bg_tile_map = match self.vc.lcdc >> 3 % 2 == 0 {
                     true => &self.vram.tmap2.tiles,
                     false => &self.vram.tmap1.tiles,
                 };
-                //info!("{:X?}", self.vc.scy);
-                //info!("{:X?}", self.vc.ly);/
-                /*for tile_x in 0..32 {
-                    let view_port_y = self.vc.scy + self.vc.ly; //So we're on line 65, and teh
-                    let tile_y = view_port_y >> 3;
-                    let in_tile_row = view_port_y % 8;
-                    for in_tile_x in 0..8 {
-                        //info!("{:?}",
-                        //    tile_data_lookup(bg_tile_map.tiles[tile_y as usize][tile_x]));
-                        //    thread::sleep(Duration::from_secs(5));
-                        background[8 * tile_x + in_tile_x] = background_palette(
-                            tile_data_lookup(bg_tile_map[tile_y][tile_x])
-                                [in_tile_row as usize][in_tile_x],
-                        );
+                //So If we are drawing pixel X, on line Y, this is:
+                //PX = (BGX + SCX) % 256
+                //LY = (BGY + SCY) % 256
+                //LY-SCY = BGY % 256
+                //BGX = BGX % 8 + BGX >>5 as the row index of the tile lookup
+                //BGY = BGY % 8 + BGY >> 5 * 32 as the tile index
+                //info!("WE GET HERE?");
+                let bgy:usize =  self.vc.ly.wrapping_sub(self.vc.scy) as usize;
+                for i in 0..(32*32){
+                    let tile = tile_data_lookup(bg_tile_map[i]);
+                    for j in tile{
+                        for k in j{
+                            if background_palette(k) != GBColor::White{
+                                info!("COLOR FOUND IN TILE {}",i);
+                            }
+                        }
                     }
-                } */
-
-                for i in 0..160 {
-                    pixel_line[i] = background[(i + self.vc.scx as usize) % 256]
                 }
+
+                info!("LY = {:?},TILE_IDX {:?}",self.vc.ly,(bgy>>5));
+                for px in 0..144{
+                    let bgx:usize = (px as u8).wrapping_sub(self.vc.scx) as usize;
+                    let tile_idx: usize = (32*(bgy>>5))+(bgx >>5);
+                    let tile = tile_data_lookup(bg_tile_map[tile_idx]);
+                    pixel_line[px as usize] = background_palette(tile[bgy as usize%8][bgx as usize%8]);
+                    if pixel_line[px]!=GBColor::White{
+                        info!("{:?}",pixel_line[px]);
+                    }
+                }
+
+            }
+
+
+/* 
+
+                let row = self.vc.scy>>5;
+                let pixel_y:usize = self.vc.ly as usize% 8;
+                for tile_idx in 0..(32) {
+                    //let tile_idx = 0; 
+                        //dbg!("DRAW TILE {:X?}, Y={:X?}, X={:X?}",tile_idx, tile_idx %32, tile_idx >>5);
+                        let tile = tile_data_lookup(bg_tile_map[(32*row as usize %256)+tile_idx as usize]);
+                        for pixel_x in 0..8 {
+                                background[(tile_idx as usize >>5)*8+pixel_y ][(tile_idx%32)*8+pixel_x] =
+                                    tile[pixel_y][pixel_x];
+                            
+                        }
+                }
+                 
                 if self.vc.lcdc >> 5 % 2 != 0 && self.vc.wy < self.vc.ly {
                     for i in 0..160 - self.vc.wx - 7 {
                         if (self.vc.wx as i8) - 7 > 0 {
@@ -275,8 +340,27 @@ pub mod screen {
                         }
                     }
                 }
-            }
-            if self.vc.lcdc >> 1 % 2 != 0 {
+ 
+                   if self.vc.lcdc >> 5 % 2 != 0 && self.vc.wy < self.vc.ly {
+                    //Window
+                    let window_tile_map = match self.vc.lcdc >> 5 % 2 == 0 {
+                        true => &self.vram.tmap2,
+                        false => &self.vram.tmap1,
+                    };
+
+                    let tile_y = self.vc.wy >> 3;
+                    let in_tile_row = self.vc.wy % 8;
+                    for tile_idx in 32*tile_y..32*(tile_y+1){
+                        for in_tile_x in 0..8 {
+                            window[(8 * tile_idx + in_tile_x) as usize] = background_palette(
+                                tile_data_lookup(window_tile_map.tiles[tile_idx as usize])
+                                    [in_tile_row as usize][in_tile_x as usize],
+                            );
+                        }
+                    } 
+                } 
+            }*//* 
+            if self.vc.lcdc >> 1 % 2 != 0 { //Do we draw objects.
                 let obj_size = self.vc.lcdc >> 2 % 2 == 1;
                 let vobj_lookup = |x: u8| match x {
                     0..128 => self.vram.block0.objects[x as usize],
@@ -347,15 +431,27 @@ pub mod screen {
                         }
                     }
                 }
-            }
+            } */
 
             self.virtual_unrendered_screen[self.vc.ly as usize] = pixel_line;
         }
         pub fn on_clock(&mut self) -> (Option<Interrupt>, Option<Interrupt>) {
+            let mut ret = (None,None);
             if self.vc.lcdc >> 7 == 1 {
-                return self.ppu_dot_cycle();
+                for _i in 0..4{
+                    let current_interation = self.ppu_dot_cycle();
+                    ret.0 = match current_interation.0{
+                        Some(x) => Some(x),
+                        None => ret.0
+                    };
+                    ret.1 = match current_interation.1{
+                        Some(x) => Some(x),
+                        None => ret.1
+                    };
+                }
+                
             }
-            (None, None)
+            ret
         }
         pub fn ppu_dot_cycle(&mut self) -> (Option<Interrupt>, Option<Interrupt>) {
             let mut interrupt: (Option<Interrupt>, Option<Interrupt>) = (None, None);
@@ -366,7 +462,8 @@ pub mod screen {
             if self.vc.ly < 144 {
                 if self.dots == 80 {
                     self.vc.stat += 1; //2->3
-                    self.draw_line()
+                    //self._vblank();
+                    //self.draw_line()
                 }
                 if self.dots == 300 {
                     //3->0

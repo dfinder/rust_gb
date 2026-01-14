@@ -13,7 +13,8 @@ pub mod mbc7 { // accelerometer
             todo!()
         }
         fn rom_read(&mut self, addr: usize) -> u8 {
-            return self.rom[addr as usize];
+            println!("HI I AM AN MBC7{}", self.rom[addr]);
+            return self.rom[addr];
         }
 
         fn rom_write(&mut self, _addr: usize,_vall: u8) {

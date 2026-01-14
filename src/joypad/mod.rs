@@ -4,7 +4,8 @@ pub mod joypad {
 
     use sdl2::{keyboard::Scancode, EventPump};
 
-    use crate::cpu::interrupt::interrupt::Interrupt;
+    use crate::cpu::cpu::Interrupt;
+
  
 
     #[derive(Clone, Copy, Debug

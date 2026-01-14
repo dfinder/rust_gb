@@ -2,11 +2,7 @@
 mod tests {
     use std::{cell::RefCell, fs::File, rc::Rc};
 
-    use sdl2::{
-        keyboard::Scancode,
-        pixels::Color,
-        EventPump,
-    };
+    use sdl2::{keyboard::Scancode, pixels::Color, EventPump};
 
     use crate::{
         audio::audio_controller::AudioController, cpu::cpu::CpuStruct, joypad::joypad::Joypad,
@@ -31,7 +27,7 @@ mod tests {
         let event_pump = sdl_context.event_pump().unwrap();
         let wrapped_pump: Rc<RefCell<EventPump>> = Rc::new(RefCell::new(event_pump));
 
-        let cartridge = File::open("./Mario.gb").expect("msg");
+        let cartridge = File::open("./01-special.gb").expect("msg");
         let joypad: Joypad = Joypad::new(
             [
                 Scancode::M,
