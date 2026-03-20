@@ -1,5 +1,5 @@
 pub mod video_controller {
-    use log::info;
+    
 
     use crate::memory::memory_wrapper::AsMemory;
     use std::fmt::Debug;
@@ -45,7 +45,7 @@ pub mod video_controller {
                 1 => self.stat, //Interrupts
                 2 => self.scy,  //Background viewport Y
                 3 => self.scx,  //Background viewport X
-                4 => (info!("WE READ"),self.ly).1,   //Line of drawinginfo!("LY IS {:X?}"
+                4 => self.ly,   //Line of drawinginfo!("LY IS {:X?}"
                 5 => self.lyc,  //Line to compare
                 6 => self.dma,  //DMA!
                 7 => self.bgp,  //Background Pallete Data
@@ -61,10 +61,9 @@ pub mod video_controller {
             match addr {
                 0 => self.lcdc = val,
                 1 => self.stat = val & 0xFB, //Last two bits are unwritable
-                2 => {
-                    self.scy = val;
+                2 => self.scy = val,
                     //info!("WE SET SCY{:?}", val)
-                } //Background Viewport Y
+                 //Background Viewport Y
                 3 => self.scx = val,         //Background viewport X
                 4 => (),                     //Line of drawing, is READ ONLY
                 5 => self.lyc = val,         //Line to compare

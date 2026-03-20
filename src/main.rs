@@ -42,13 +42,13 @@ fn main(){
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
-    let window = video_subsystem.window("Gameboy",256,256).position_centered().build().unwrap();
+    let window = video_subsystem.window("Gameboy",160,144).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let gb_audio = AudioController::new(audio_subsystem);
 
     let event_pump = sdl_context.event_pump().unwrap();
     let wrapped_pump: Rc<RefCell<EventPump>> = Rc::new(RefCell::new(event_pump));
-    let cartridge = File::open("./01-special.gb").expect("msg");
+    let cartridge = File::open("../Mario.gb").expect("msg");
     let joypad: Joypad = Joypad::new([
         Scancode::M,
         Scancode::N,

@@ -1,7 +1,8 @@
 pub mod vram {
 
-    use std::fmt::Debug;
+    use std::{fmt::Debug, ops::RangeFrom};
     use log::debug;
+    use sdl2::pixels::Color;
 
     use crate::{memory::memory_wrapper::AsMemory, screen::screen::ColorID};
 
@@ -18,6 +19,37 @@ pub mod vram {
         return [[ColorID::Unset; 8]; 8];
     }
     impl Vram {
+        pub fn fetch_line(&mut self,tilemap:bool,block_select:bool, line_row:u8, offset:u8)->[ColorID;160]{
+            let tmap = match tilemap{
+                true => &self.tmap2,
+                false => &self.tmap1,
+            };
+
+            let start:usize = ((line_row>>3)<<5).into();
+            let end = start + 32;
+            let tiles= tmap.tiles.get(start..end).expect("lmao can't find my tiles");
+           
+            let output:Vec<ColorID>= tiles.iter().map(|index:&u8 | {
+                    match index{
+                        128..=255=>{
+                            self.block1.objects[(index-128) as usize]
+                        },
+                        0..128=>{
+                            match block_select{
+                                true=> self.block0.objects[*index as usize],
+                                false=> self.block2.objects[*index as usize]
+                            }
+                        }
+                    }
+                }
+            ).map(|eight_pixels| Block::get_tile(eight_pixels)).map(|tile| tile[(line_row%8) as usize] ).flatten().collect();
+            let ret:[ColorID;256] = output.try_into().expect("This should be fixed length");
+            let mut mod_ret=[ColorID::Unset;160];
+            for x in 0..160{
+                mod_ret[x] =  ret[((x-offset as usize)  % 256) as usize]
+            }
+            return mod_ret;
+        }
         pub fn new() -> Self {
             return Vram {
                 block0: Block::new(),
@@ -76,12 +108,12 @@ pub mod vram {
 
     #[derive(Debug)] 
     pub struct TileMap {
-        pub tiles: [u8; 32*32], //I AM AN ORDERED STRUCTURE THAT REPRESENTS A MAPPING TO A BACKGROUND
+        pub tiles: [u8; 1024], //I AM AN ORDERED STRUCTURE THAT REPRESENTS A MAPPING TO A BACKGROUND
     }
     impl TileMap {
         pub fn new() -> Self {
             return TileMap {
-                tiles: [0;32* 32],
+                tiles: [0;1024],
             };
         }
     }

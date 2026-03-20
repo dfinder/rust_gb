@@ -249,14 +249,14 @@ pub mod memory_wrapper {
         pub fn on_clock(&mut self) {
             let video_interrupts = self.ppu.on_clock();
             if video_interrupts.0.is_some() {
-                //LCDC
+                //VBLANK
                 if self.interrupts_enabled % 2 == 1 {
                     self.iflag |= 0x01;
                 }
             }
             if video_interrupts.1.is_some() {
-                //VBLANK
-                if self.interrupts_enabled % 2 >> 1 == 1 {
+                //LCDC
+                if (self.interrupts_enabled % 4) >> 1 == 1 {
                     self.iflag |= 0x02;
                 }
             }

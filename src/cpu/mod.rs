@@ -35,6 +35,7 @@ pub mod cpu {
         ime_flag: InterruptState,
         stopped: bool,
         clock_cycle_wait: Rc<RefCell<u8>>,
+        
         //fetched_instruction:CPUFunct,
         //Preprocess Option<Operand>
         //used for mem reads to HL, failed conditional jumps
@@ -413,9 +414,9 @@ pub mod cpu {
                 Src8::Imm8 => self.get_imm8(),
                 Src8::HighBank => {
                     let imm = self.get_imm8();
-                    print!("{}",imm);
+                    //print!("{}",imm);
                     let ret = self.memory.grab_memory_8(u16::from_be_bytes([0xff, imm]));
-                    print!("{}",ret);
+                    //print!("{}",ret);
                     ret
                 }
                 Src8::Acc => self.a,
